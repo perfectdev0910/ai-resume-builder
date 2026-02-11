@@ -1,0 +1,33 @@
+# Render.com Blueprint for AI Resume Builder Backend
+# Deploy: https://render.com/docs/infrastructure-as-code
+
+services:
+  - type: web
+    name: ai-resume-builder-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start:production
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLEANUP_SECRET
+        generateValue: true
+      - key: ENABLE_CRON_CLEANUP
+        value: true
+      - key: FILE_RETENTION_DAYS
+        value: 60
+      - key: STORAGE_PROVIDER
+        value: supabase
+      # Add these in Render Dashboard:
+      # - OPENAI_API_KEY
+      # - FRONTEND_URL
+      # - DATABASE_URL (from Supabase)
+      # - SUPABASE_URL
+      # - SUPABASE_SERVICE_KEY
+      # - SUPABASE_BUCKET
+      # - ADMIN_EMAIL
+      # - ADMIN_PASSWORD

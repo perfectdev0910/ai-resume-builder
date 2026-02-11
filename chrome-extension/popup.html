@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Resume Builder</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <span>AI Resume Builder</span>
+      </div>
+      <button id="settingsBtn" class="icon-btn" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Login/Register View -->
+    <div id="authView" class="view">
+      <div class="tabs">
+        <button class="tab active" data-tab="login">Login</button>
+        <button class="tab" data-tab="register">Register</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="loginForm" class="form">
+        <div class="form-group">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" required placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+        <p class="text-center mt-2">
+          <a href="#" id="openDashboardLink">Open Dashboard</a>
+        </p>
+      </form>
+
+      <!-- Register Form (hidden by default) -->
+      <form id="registerForm" class="form hidden">
+        <div class="form-group">
+          <label for="regEmail">Email *</label>
+          <input type="email" id="regEmail" required placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+          <label for="regPassword">Password *</label>
+          <input type="password" id="regPassword" required placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label for="regName">Full Name *</label>
+          <input type="text" id="regName" required placeholder="John Doe">
+        </div>
+        <button type="submit" class="btn btn-primary">Register</button>
+      </form>
+    </div>
+
+    <!-- Main View (when logged in) -->
+    <div id="mainView" class="view hidden">
+      <div class="user-info">
+        <span id="userName">User</span>
+        <button id="logoutBtn" class="btn btn-sm btn-secondary">Logout</button>
+      </div>
+
+      <!-- JD Scraping Section -->
+      <div class="section">
+        <h3>Job Description</h3>
+        <button id="scrapeBtn" class="btn btn-primary btn-block">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Scrape Job Description
+        </button>
+        <div id="scrapedInfo" class="scraped-info hidden">
+          <div class="scraped-details">
+            <div class="form-group">
+              <label for="scrapedJobTitle">Job Title</label>
+              <input type="text" id="scrapedJobTitle" placeholder="Detected job title...">
+            </div>
+            <div class="form-group">
+              <label for="scrapedCompanyName">Company Name</label>
+              <input type="text" id="scrapedCompanyName" placeholder="Detected company name...">
+            </div>
+            <div class="form-group">
+              <label for="scrapedJobLink">Job Link</label>
+              <input type="text" id="scrapedJobLink" placeholder="Job posting URL..." readonly>
+            </div>
+          </div>
+          <textarea id="jdContent" rows="6" placeholder="Job description will appear here..."></textarea>
+        </div>
+      </div>
+
+      <!-- Manual Input Section -->
+      <div class="section">
+        <details>
+          <summary>Or paste manually</summary>
+          <div class="form-group">
+            <label for="manualCompanyName">Company Name *</label>
+            <input type="text" id="manualCompanyName" placeholder="Company name">
+          </div>
+          <textarea id="manualJd" rows="4" placeholder="Paste job description here..."></textarea>
+          <input type="text" id="manualJdLink" placeholder="Job posting URL (optional)" class="mt-2">
+        </details>
+      </div>
+
+      <!-- Generate Section -->
+      <div class="section">
+        <button id="generateBtn" class="btn btn-success btn-block" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          Generate Resume & Cover Letter
+        </button>
+      </div>
+
+      <!-- Duplicate Warning Modal -->
+      <div id="duplicateModal" class="modal hidden">
+        <div class="modal-content">
+          <h3>⚠️ Duplicate Application</h3>
+          <p id="duplicateMessage">You have already applied to this company in the last 2 weeks.</p>
+          <div class="modal-actions">
+            <button id="cancelDuplicate" class="btn btn-secondary">Cancel</button>
+            <button id="proceedDuplicate" class="btn btn-primary">Proceed Anyway</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status/Result Section -->
+      <div id="statusSection" class="section hidden">
+        <div id="loadingIndicator" class="loading hidden">
+          <div class="spinner"></div>
+          <span>Generating your tailored Resume & Cover Letter...</span>
+        </div>
+        <div id="resultSection" class="result hidden">
+          <h3>✅ Documents Generated!</h3>
+          <div class="download-section">
+            <h4>Resume</h4>
+            <div class="download-buttons">
+              <a id="downloadResumeDoc" href="#" class="btn btn-primary btn-sm" download>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                DOCX
+              </a>
+              <a id="downloadResumePdf" href="#" class="btn btn-secondary btn-sm" download>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                PDF
+              </a>
+            </div>
+          </div>
+          <div class="download-section">
+            <h4>Cover Letter</h4>
+            <div class="download-buttons">
+              <a id="downloadCoverLetterDoc" href="#" class="btn btn-primary btn-sm" download>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                DOCX
+              </a>
+              <a id="downloadCoverLetterPdf" href="#" class="btn btn-secondary btn-sm" download>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                PDF
+              </a>
+            </div>
+          </div>
+        </div>
+        <div id="errorSection" class="error hidden">
+          <p id="errorMessage"></p>
+        </div>
+      </div>
+
+      <!-- Quick Links -->
+      <div class="quick-links">
+        <a href="#" id="viewHistoryLink">View History</a>
+        <span>•</span>
+        <a href="#" id="editProfileLink">Edit Profile</a>
+        <span>•</span>
+        <a href="#" id="dashboardLink">Dashboard</a>
+      </div>
+    </div>
+
+    <!-- Settings View -->
+    <div id="settingsView" class="view hidden">
+      <h3>Settings</h3>
+      <form id="settingsForm" class="form">
+        <div class="form-group">
+          <label for="apiUrl">API Server URL</label>
+          <input type="url" id="apiUrl" placeholder="http://localhost:3000">
+        </div>
+        <div class="form-group">
+          <label for="dashboardUrl">Dashboard URL</label>
+          <input type="url" id="dashboardUrl" placeholder="http://localhost:5173">
+        </div>
+        <div class="btn-group">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" id="cancelSettings" class="btn btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
