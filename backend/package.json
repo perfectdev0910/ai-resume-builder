@@ -27,6 +27,7 @@
     "pdf-lib": "^1.17.1",
     "pg": "^8.11.3",
     "puppeteer-core": "^21.11.0",
+    "sqlite3": "^5.1.7",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
