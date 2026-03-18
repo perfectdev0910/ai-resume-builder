@@ -56,6 +56,7 @@ router.post('/register', async (req, res) => {
 // Login
 router.post('/login', async (req, res) => {
   try {
+    console.log('LOGIN BODY:', req.body);
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -102,8 +103,11 @@ router.post('/login', async (req, res) => {
       token
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('LOGIN ROUTE ERROR:', error);
+    return res.status(500).json({
+      error: 'Login failed',
+      details: error.message
+    });
   }
 });
 
