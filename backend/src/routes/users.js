@@ -125,8 +125,8 @@ router.get('/profile', authMiddleware, async (req, res) => {
     );
 
     const certifications = await getAllCompat(
-      'SELECT * FROM certifications WHERE user_id = ? ORDER BY date_obtained DESC',
-      'SELECT * FROM certifications WHERE user_id = $1 ORDER BY date_obtained DESC',
+      'SELECT * FROM certifications WHERE user_id = ? ORDER BY created_at DESC',
+      'SELECT * FROM certifications WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.id]
     );
 
@@ -412,7 +412,7 @@ router.delete('/education/:id', authMiddleware, async (req, res) => {
 
 router.post('/certifications', authMiddleware, async (req, res) => {
   try {
-    const { name, issuer, date_obtained, expiry_date, credential_id, credly_link } = req.body;
+    const { name, issuer, created_at, expiry_date, credential_id, credly_link } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Certification name is required' });
@@ -423,18 +423,18 @@ router.post('/certifications', authMiddleware, async (req, res) => {
     if (isPostgres) {
       const result = await runQueryCompat(
         '',
-        `INSERT INTO certifications (user_id, name, issuer, date_obtained, expiry_date, credential_id, credly_link)
+        `INSERT INTO certifications (user_id, name, issuer, created_at, expiry_date, credential_id, credly_link)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [req.user.id, name, issuer || '', date_obtained || '', expiry_date || '', credential_id || '', credly_link || '']
+        [req.user.id, name, issuer || '', created_at || '', expiry_date || '', credential_id || '', credly_link || '']
       );
       certification = result.rows?.[0];
     } else {
       const result = await runQueryCompat(
-        `INSERT INTO certifications (user_id, name, issuer, date_obtained, expiry_date, credential_id, credly_link)
+        `INSERT INTO certifications (user_id, name, issuer, created_at, expiry_date, credential_id, credly_link)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         '',
-        [req.user.id, name, issuer || '', date_obtained || '', expiry_date || '', credential_id || '', credly_link || '']
+        [req.user.id, name, issuer || '', created_at || '', expiry_date || '', credential_id || '', credly_link || '']
       );
       certification = await getOneCompat(
         'SELECT * FROM certifications WHERE id = ?',
@@ -695,8 +695,8 @@ router.get('/all/profiles', authMiddleware, adminMiddleware, async (req, res) =>
       );
 
       const certifications = await getAllCompat(
-        'SELECT * FROM certifications WHERE user_id = ? ORDER BY date_obtained DESC',
-        'SELECT * FROM certifications WHERE user_id = $1 ORDER BY date_obtained DESC',
+        'SELECT * FROM certifications WHERE user_id = ? ORDER BY created_at DESC',
+        'SELECT * FROM certifications WHERE user_id = $1 ORDER BY created_at DESC',
         [user.id]
       );
 
