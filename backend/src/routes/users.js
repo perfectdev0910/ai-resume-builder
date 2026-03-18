@@ -718,11 +718,19 @@ router.get('/all/profiles', authMiddleware, adminMiddleware, async (req, res) =>
         [user.id]
       );
 
-      const appCount = await getOneCompat(
-        'SELECT COUNT(*) as count FROM applications WHERE user_id = ?',
-        'SELECT COUNT(*)::int as count FROM applications WHERE user_id = $1',
-        [user.id]
-      );
+      let appCount = 0;
+
+      try {
+        const result = await getOneCompat(
+          'SELECT COUNT(*) as count FROM applications WHERE user_id = ?',
+          'SELECT COUNT(*) as count FROM applications WHERE user_id = $1',
+          [user.id]
+        );
+
+        appCount = Number(result?.count || 0);
+      } catch (err) {
+        console.error('App count error:', err);
+      }
 
       return {
         user,
