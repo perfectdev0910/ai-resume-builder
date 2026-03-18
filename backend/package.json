@@ -10,7 +10,7 @@
     "cleanup": "node src/jobs/cleanup.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.14.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
