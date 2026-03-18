@@ -1,11 +1,86 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
-const { runQuery, getOne, getAll } = require('../models/database');
+
+const isPostgres = !!process.env.DATABASE_URL;
+const db = isPostgres
+  ? require('../models/database.postgres')
+  : require('../models/database');
+
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
+
+/**
+ * DB helpers compatible with both SQLite and Postgres.
+ */
+async function getOneCompat(sqliteSql, postgresSql, params = []) {
+  if (isPostgres) {
+    if (typeof db.getOne === 'function') {
+      return db.getOne(postgresSql, params);
+    }
+    if (typeof db.query === 'function') {
+      const result = await db.query(postgresSql, params);
+      return result.rows[0] || null;
+    }
+    if (db.pool && typeof db.pool.query === 'function') {
+      const result = await db.pool.query(postgresSql, params);
+      return result.rows[0] || null;
+    }
+    throw new Error('Postgres database adapter is missing getOne/query/pool.query');
+  }
+
+  if (typeof db.getOne !== 'function') {
+    throw new Error('SQLite database adapter is missing getOne');
+  }
+
+  return db.getOne(sqliteSql, params);
+}
+
+async function getAllCompat(sqliteSql, postgresSql, params = []) {
+  if (isPostgres) {
+    if (typeof db.getAll === 'function') {
+      return db.getAll(postgresSql, params);
+    }
+    if (typeof db.query === 'function') {
+      const result = await db.query(postgresSql, params);
+      return result.rows || [];
+    }
+    if (db.pool && typeof db.pool.query === 'function') {
+      const result = await db.pool.query(postgresSql, params);
+      return result.rows || [];
+    }
+    throw new Error('Postgres database adapter is missing getAll/query/pool.query');
+  }
+
+  if (typeof db.getAll !== 'function') {
+    throw new Error('SQLite database adapter is missing getAll');
+  }
+
+  return db.getAll(sqliteSql, params);
+}
+
+async function runQueryCompat(sqliteSql, postgresSql, params = []) {
+  if (isPostgres) {
+    if (typeof db.runQuery === 'function') {
+      return db.runQuery(postgresSql, params);
+    }
+    if (typeof db.query === 'function') {
+      return db.query(postgresSql, params);
+    }
+    if (db.pool && typeof db.pool.query === 'function') {
+      return db.pool.query(postgresSql, params);
+    }
+    throw new Error('Postgres database adapter is missing runQuery/query/pool.query');
+  }
+
+  if (typeof db.runQuery !== 'function') {
+    throw new Error('SQLite database adapter is missing runQuery');
+  }
+
+  return db.runQuery(sqliteSql, params);
+}
 
 // Helper to delete a file if it exists
 async function deleteFileIfExists(filename) {
@@ -14,7 +89,6 @@ async function deleteFileIfExists(filename) {
     const filepath = path.join(UPLOAD_DIR, filename);
     await fs.unlink(filepath);
   } catch (err) {
-    // File might not exist, ignore error
     if (err.code !== 'ENOENT') {
       console.error(`Failed to delete file ${filename}:`, err);
     }
@@ -25,23 +99,27 @@ async function deleteFileIfExists(filename) {
 router.get('/check-duplicate', authMiddleware, async (req, res) => {
   try {
     const { companyName } = req.query;
-    
+
     if (!companyName) {
       return res.json({ isDuplicate: false });
     }
 
-    const result = await getOne(
-      `SELECT COUNT(*) as count FROM applications 
-       WHERE user_id = ? 
+    const result = await getOneCompat(
+      `SELECT COUNT(*) as count FROM applications
+       WHERE user_id = ?
        AND LOWER(company_name) = LOWER(?)
        AND applied_at >= DATE('now', '-14 days')`,
+      `SELECT COUNT(*)::int as count FROM applications
+       WHERE user_id = $1
+       AND LOWER(company_name) = LOWER($2)
+       AND applied_at >= NOW() - INTERVAL '14 days'`,
       [req.user.id, companyName]
     );
 
-    res.json({ isDuplicate: result.count > 0 });
+    res.json({ isDuplicate: Number(result.count) > 0 });
   } catch (error) {
     console.error('Duplicate check error:', error);
-    res.status(500).json({ error: 'Failed to check for duplicates' });
+    res.status(500).json({ error: 'Failed to check for duplicates', details: error.message });
   }
 });
 
@@ -49,55 +127,91 @@ router.get('/check-duplicate', authMiddleware, async (req, res) => {
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { period, startDate, endDate, page = 1, limit = 20, search } = req.query;
-    const offset = (page - 1) * limit;
-    
-    let dateFilter = '';
-    let searchFilter = '';
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+
+    let sqliteDateFilter = '';
+    let postgresDateFilter = '';
+    let sqliteSearchFilter = '';
+    let postgresSearchFilter = '';
     const params = [req.user.id];
+
+    const nextParam = () => (isPostgres ? `$${params.length + 1}` : '?');
 
     if (period) {
       switch (period) {
         case 'daily':
-          dateFilter = "AND DATE(applied_at) = DATE('now')";
+          sqliteDateFilter = "AND DATE(applied_at) = DATE('now')";
+          postgresDateFilter = "AND DATE(applied_at) = CURRENT_DATE";
           break;
         case 'weekly':
-          dateFilter = "AND applied_at >= DATE('now', '-7 days')";
+          sqliteDateFilter = "AND applied_at >= DATE('now', '-7 days')";
+          postgresDateFilter = "AND applied_at >= NOW() - INTERVAL '7 days'";
           break;
         case 'monthly':
-          dateFilter = "AND applied_at >= DATE('now', '-30 days')";
+          sqliteDateFilter = "AND applied_at >= DATE('now', '-30 days')";
+          postgresDateFilter = "AND applied_at >= NOW() - INTERVAL '30 days'";
           break;
       }
     } else if (startDate && endDate) {
-      dateFilter = 'AND DATE(applied_at) BETWEEN ? AND ?';
-      params.push(startDate, endDate);
+      sqliteDateFilter = `AND DATE(applied_at) BETWEEN ? AND ?`;
+      const p1 = nextParam();
+      params.push(startDate);
+      const p2 = nextParam();
+      params.push(endDate);
+      postgresDateFilter = `AND DATE(applied_at) BETWEEN ${p1} AND ${p2}`;
     }
 
-    // Add search filter for company name
     if (search && search.trim()) {
-      searchFilter = 'AND LOWER(company_name) LIKE LOWER(?)';
-      params.push(`%${search.trim()}%`);
+      const searchValue = `%${search.trim()}%`;
+      sqliteSearchFilter = 'AND LOWER(company_name) LIKE LOWER(?)';
+      const p = nextParam();
+      params.push(searchValue);
+      postgresSearchFilter = `AND LOWER(company_name) LIKE LOWER(${p})`;
     }
 
-    // Get total count
-    const countResult = await getOne(
-      `SELECT COUNT(*) as total FROM applications WHERE user_id = ? ${dateFilter} ${searchFilter}`,
+    const countResult = await getOneCompat(
+      `SELECT COUNT(*) as total FROM applications WHERE user_id = ? ${sqliteDateFilter} ${sqliteSearchFilter}`,
+      `SELECT COUNT(*)::int as total FROM applications WHERE user_id = $1 ${postgresDateFilter} ${postgresSearchFilter}`,
       params
     );
 
-    // Get applications
-    const applications = await getAll(
-      `SELECT * FROM applications 
-       WHERE user_id = ? ${dateFilter} ${searchFilter}
-       ORDER BY applied_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, parseInt(limit), parseInt(offset)]
+    let applications;
+    if (isPostgres) {
+      const listParams = [...params];
+      const limitPlaceholder = `$${listParams.length + 1}`;
+      listParams.push(limitNum);
+      const offsetPlaceholder = `$${listParams.length + 1}`;
+      listParams.push(offset);
+
+      applications = await getAllCompat(
+        '',
+        `SELECT * FROM applications
+         WHERE user_id = $1 ${postgresDateFilter} ${postgresSearchFilter}
+         ORDER BY applied_at DESC
+         LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+        listParams
+      );
+    } else {
+      applications = await getAllCompat(
+        `SELECT * FROM applications
+         WHERE user_id = ? ${sqliteDateFilter} ${sqliteSearchFilter}
+         ORDER BY applied_at DESC
+         LIMIT ? OFFSET ?`,
+        '',
+        [...params, limitNum, offset]
+      );
+    }
+
+    const user = await getOneCompat(
+      'SELECT timezone FROM users WHERE id = ?',
+      'SELECT timezone FROM users WHERE id = $1',
+      [req.user.id]
     );
 
-    // Get user timezone for formatting
-    const user = await getOne('SELECT timezone FROM users WHERE id = ?', [req.user.id]);
     const userTimezone = user?.timezone || 'UTC';
 
-    // Format response
     const formattedApps = applications.map(app => ({
       id: app.id,
       jobTitle: app.job_title,
@@ -116,69 +230,85 @@ router.get('/', authMiddleware, async (req, res) => {
     res.json({
       applications: formattedApps,
       pagination: {
-        total: countResult.total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(countResult.total / limit)
+        total: Number(countResult.total),
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(Number(countResult.total) / limitNum)
       },
       userTimezone
     });
   } catch (error) {
     console.error('Applications fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch applications' });
+    res.status(500).json({ error: 'Failed to fetch applications', details: error.message });
   }
 });
 
 // Get application statistics
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
-    const stats = await getAll(
-      `SELECT 
+    const stats = await getAllCompat(
+      `SELECT
         COUNT(*) as total,
         COUNT(CASE WHEN DATE(applied_at) = DATE('now') THEN 1 END) as today,
         COUNT(CASE WHEN applied_at >= DATE('now', '-7 days') THEN 1 END) as thisWeek,
         COUNT(CASE WHEN applied_at >= DATE('now', '-30 days') THEN 1 END) as thisMonth
        FROM applications WHERE user_id = ?`,
+      `SELECT
+        COUNT(*)::int as total,
+        COUNT(CASE WHEN DATE(applied_at) = CURRENT_DATE THEN 1 END)::int as today,
+        COUNT(CASE WHEN applied_at >= NOW() - INTERVAL '7 days' THEN 1 END)::int as thisWeek,
+        COUNT(CASE WHEN applied_at >= NOW() - INTERVAL '30 days' THEN 1 END)::int as thisMonth
+       FROM applications WHERE user_id = $1`,
       [req.user.id]
     );
 
-    // Get applications by company (top 10)
-    const byCompany = await getAll(
-      `SELECT company_name, COUNT(*) as count 
-       FROM applications 
+    const byCompany = await getAllCompat(
+      `SELECT company_name, COUNT(*) as count
+       FROM applications
        WHERE user_id = ? AND company_name IS NOT NULL
-       GROUP BY company_name 
-       ORDER BY count DESC 
+       GROUP BY company_name
+       ORDER BY count DESC
+       LIMIT 10`,
+      `SELECT company_name, COUNT(*)::int as count
+       FROM applications
+       WHERE user_id = $1 AND company_name IS NOT NULL
+       GROUP BY company_name
+       ORDER BY count DESC
        LIMIT 10`,
       [req.user.id]
     );
 
-    // Get applications over time (last 30 days)
-    const timeline = await getAll(
-      `SELECT DATE(applied_at) as date, COUNT(*) as count 
-       FROM applications 
+    const timeline = await getAllCompat(
+      `SELECT DATE(applied_at) as date, COUNT(*) as count
+       FROM applications
        WHERE user_id = ? AND applied_at >= DATE('now', '-30 days')
-       GROUP BY DATE(applied_at) 
+       GROUP BY DATE(applied_at)
+       ORDER BY date`,
+      `SELECT DATE(applied_at) as date, COUNT(*)::int as count
+       FROM applications
+       WHERE user_id = $1 AND applied_at >= NOW() - INTERVAL '30 days'
+       GROUP BY DATE(applied_at)
        ORDER BY date`,
       [req.user.id]
     );
 
     res.json({
-      stats: stats[0],
+      stats: stats[0] || { total: 0, today: 0, thisWeek: 0, thisMonth: 0 },
       byCompany,
       timeline
     });
   } catch (error) {
     console.error('Stats fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch statistics' });
+    res.status(500).json({ error: 'Failed to fetch statistics', details: error.message });
   }
 });
 
 // Get single application
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const application = await getOne(
+    const application = await getOneCompat(
       'SELECT * FROM applications WHERE id = ? AND user_id = ?',
+      'SELECT * FROM applications WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 
@@ -202,7 +332,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('Application fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch application' });
+    res.status(500).json({ error: 'Failed to fetch application', details: error.message });
   }
 });
 
@@ -211,27 +341,31 @@ router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const { status, notes } = req.body;
 
-    await runQuery(
-      `UPDATE applications SET 
+    await runQueryCompat(
+      `UPDATE applications SET
         status = COALESCE(?, status),
         notes = COALESCE(?, notes)
        WHERE id = ? AND user_id = ?`,
-      [status, notes, req.params.id, req.user.id]
+      `UPDATE applications SET
+        status = COALESCE($1, status),
+        notes = COALESCE($2, notes)
+       WHERE id = $3 AND user_id = $4`,
+      [status ?? null, notes ?? null, req.params.id, req.user.id]
     );
 
     res.json({ message: 'Application updated successfully' });
   } catch (error) {
     console.error('Application update error:', error);
-    res.status(500).json({ error: 'Failed to update application' });
+    res.status(500).json({ error: 'Failed to update application', details: error.message });
   }
 });
 
 // Delete application
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
-    // First, fetch the application to get file paths
-    const application = await getOne(
+    const application = await getOneCompat(
       'SELECT * FROM applications WHERE id = ? AND user_id = ?',
+      'SELECT * FROM applications WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 
@@ -239,7 +373,6 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Delete associated files from storage
     await Promise.all([
       deleteFileIfExists(application.cv_doc_path),
       deleteFileIfExists(application.cv_pdf_path),
@@ -247,16 +380,16 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       deleteFileIfExists(application.cover_letter_pdf_path)
     ]);
 
-    // Delete the database record
-    await runQuery(
+    await runQueryCompat(
       'DELETE FROM applications WHERE id = ? AND user_id = ?',
+      'DELETE FROM applications WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 
     res.json({ message: 'Application deleted successfully' });
   } catch (error) {
     console.error('Application delete error:', error);
-    res.status(500).json({ error: 'Failed to delete application' });
+    res.status(500).json({ error: 'Failed to delete application', details: error.message });
   }
 });
 
@@ -264,18 +397,38 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 router.get('/admin/all', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { page = 1, limit = 50 } = req.query;
-    const offset = (page - 1) * limit;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
 
-    const applications = await getAll(
-      `SELECT a.*, u.email, u.full_name 
-       FROM applications a
-       JOIN users u ON a.user_id = u.id
-       ORDER BY a.applied_at DESC
-       LIMIT ? OFFSET ?`,
-      [parseInt(limit), parseInt(offset)]
+    let applications;
+    if (isPostgres) {
+      applications = await getAllCompat(
+        '',
+        `SELECT a.*, u.email, u.full_name
+         FROM applications a
+         JOIN users u ON a.user_id = u.id
+         ORDER BY a.applied_at DESC
+         LIMIT $1 OFFSET $2`,
+        [limitNum, offset]
+      );
+    } else {
+      applications = await getAllCompat(
+        `SELECT a.*, u.email, u.full_name
+         FROM applications a
+         JOIN users u ON a.user_id = u.id
+         ORDER BY a.applied_at DESC
+         LIMIT ? OFFSET ?`,
+        '',
+        [limitNum, offset]
+      );
+    }
+
+    const countResult = await getOneCompat(
+      'SELECT COUNT(*) as total FROM applications',
+      'SELECT COUNT(*)::int as total FROM applications',
+      []
     );
-
-    const countResult = await getOne('SELECT COUNT(*) as total FROM applications');
 
     res.json({
       applications: applications.map(app => ({
@@ -290,15 +443,15 @@ router.get('/admin/all', authMiddleware, adminMiddleware, async (req, res) => {
         status: app.status
       })),
       pagination: {
-        total: countResult.total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(countResult.total / limit)
+        total: Number(countResult.total),
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(Number(countResult.total) / limitNum)
       }
     });
   } catch (error) {
     console.error('Admin applications fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch applications' });
+    res.status(500).json({ error: 'Failed to fetch applications', details: error.message });
   }
 });
 
