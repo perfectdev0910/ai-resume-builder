@@ -85,7 +85,6 @@ router.post('/register', async (req, res) => {
 
     const normalizedEmail = String(email).trim().toLowerCase();
 
-    // Check if user already exists
     const existingUser = await getOneCompat(
       'SELECT id FROM users WHERE email = ?',
       'SELECT id FROM users WHERE email = $1',
@@ -96,10 +95,9 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    let newUserId;
+    let user;
 
     if (isPostgres) {
       const insertResult = await runQueryCompat(
@@ -108,7 +106,7 @@ router.post('/register', async (req, res) => {
           (email, password, full_name, address, phone_number, linkedin_profile, github_link, experience_years, timezone, status)
          VALUES
           ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         RETURNING id`,
+         RETURNING id, email, full_name, role, timezone, status`,
         [
           normalizedEmail,
           hashedPassword,
@@ -123,7 +121,7 @@ router.post('/register', async (req, res) => {
         ]
       );
 
-      newUserId = insertResult.rows?.[0]?.id;
+      user = insertResult.rows?.[0] || null;
     } else {
       const insertResult = await runQueryCompat(
         `INSERT INTO users
@@ -144,14 +142,16 @@ router.post('/register', async (req, res) => {
         ]
       );
 
-      newUserId = insertResult.lastID;
+      user = await getOneCompat(
+        'SELECT id, email, full_name, role, timezone, status FROM users WHERE id = ?',
+        'SELECT id, email, full_name, role, timezone, status FROM users WHERE id = $1',
+        [insertResult.lastID]
+      );
     }
 
-    const user = await getOneCompat(
-      'SELECT id, email, full_name, role, timezone, status FROM users WHERE id = ?',
-      'SELECT id, email, full_name, role, timezone, status FROM users WHERE id = $1',
-      [newUserId]
-    );
+    if (!user) {
+      throw new Error('User was inserted but could not be fetched');
+    }
 
     res.status(201).json({
       message: 'Registration successful. Your account is pending admin approval.',
