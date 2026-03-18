@@ -95,6 +95,14 @@ app.use('/api/cv', cvRoutes);
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
+
+  console.log(`${req.method} ${req.originalUrl}`, {
+    origin: req.headers.origin,
+    body: req.body
+  });
+  if (res.headersSent) {
+    return next(err);
+  }
   res.status(err.status || 500).json({
     error: err.message || 'Internal server error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
