@@ -418,24 +418,47 @@ router.post('/certifications', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Certification name is required' });
     }
 
+    // 🔥 helper to fix Postgres issues
+    const clean = (v) => (v === '' || v === undefined ? null : v);
+
     let certification;
 
     if (isPostgres) {
       const result = await runQueryCompat(
         '',
-        `INSERT INTO certifications (user_id, name, issuer, created_at, expiry_date, credential_id, credly_link)
+        `INSERT INTO certifications 
+          (user_id, name, issuer, created_at, expiry_date, credential_id, credly_link)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [req.user.id, name, issuer || '', created_at || '', expiry_date || '', credential_id || '', credly_link || '']
+        [
+          req.user.id,
+          name,
+          clean(issuer),
+          clean(created_at),
+          clean(expiry_date),
+          clean(credential_id),
+          clean(credly_link)
+        ]
       );
+
       certification = result.rows?.[0];
     } else {
       const result = await runQueryCompat(
-        `INSERT INTO certifications (user_id, name, issuer, created_at, expiry_date, credential_id, credly_link)
+        `INSERT INTO certifications 
+          (user_id, name, issuer, created_at, expiry_date, credential_id, credly_link)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         '',
-        [req.user.id, name, issuer || '', created_at || '', expiry_date || '', credential_id || '', credly_link || '']
+        [
+          req.user.id,
+          name,
+          clean(issuer),
+          clean(created_at),
+          clean(expiry_date),
+          clean(credential_id),
+          clean(credly_link)
+        ]
       );
+
       certification = await getOneCompat(
         'SELECT * FROM certifications WHERE id = ?',
         'SELECT * FROM certifications WHERE id = $1',
@@ -444,23 +467,13 @@ router.post('/certifications', authMiddleware, async (req, res) => {
     }
 
     res.status(201).json({ certification });
+
   } catch (error) {
     console.error('Certification add error:', error);
-    res.status(500).json({ error: 'Failed to add certification', details: error.message });
-  }
-});
-
-router.delete('/certifications/:id', authMiddleware, async (req, res) => {
-  try {
-    await runQueryCompat(
-      'DELETE FROM certifications WHERE id = ? AND user_id = ?',
-      'DELETE FROM certifications WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.user.id]
-    );
-    res.json({ message: 'Certification deleted successfully' });
-  } catch (error) {
-    console.error('Certification delete error:', error);
-    res.status(500).json({ error: 'Failed to delete certification', details: error.message });
+    res.status(500).json({
+      error: 'Failed to add certification',
+      details: error.message
+    });
   }
 });
 
