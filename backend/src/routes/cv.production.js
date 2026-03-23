@@ -17,6 +17,8 @@ const cvGenerator = process.env.STORAGE_PROVIDER
   ? require('../services/cvGenerator.cloud') 
   : require('../services/cvGenerator');
 
+
+
 const storage = process.env.STORAGE_PROVIDER 
   ? require('../services/storage') 
   : null;
@@ -26,6 +28,8 @@ const router = express.Router();
 // Generate CV and Cover Letter from job description
 router.post('/generate', authMiddleware, async (req, res) => {
   try {
+    console.log('STORAGE_PROVIDER:', process.env.STORAGE_PROVIDER);
+    console.log('Using cloud generator:', !!process.env.STORAGE_PROVIDER);
     const { jobDescription, jdLink, jobTitle: providedJobTitle, companyName: providedCompanyName } = req.body;
 
     if (!jobDescription) {
