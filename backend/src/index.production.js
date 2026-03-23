@@ -18,7 +18,7 @@ const db = process.env.DATABASE_URL
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const applicationRoutes = require('./routes/applications');
-const cvRoutes = require('./routes/cv');
+const cvRoutes = require('./routes/cv.production');
 const { cleanupOldFiles } = require('./jobs/cleanup');
 
 const app = express();
