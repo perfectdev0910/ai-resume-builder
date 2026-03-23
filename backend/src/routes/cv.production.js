@@ -13,9 +13,7 @@ const db = process.env.DATABASE_URL
   : require('../models/database');
 
 // Use cloud storage in production
-const cvGenerator = process.env.STORAGE_PROVIDER 
-  ? require('../services/cvGenerator.cloud') 
-  : require('../services/cvGenerator');
+const cvGenerator = require('../services/cvGenerator.cloud');
 
 
 
