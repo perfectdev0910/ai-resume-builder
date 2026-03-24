@@ -23,47 +23,43 @@ const storage = process.env.STORAGE_PROVIDER
 
 const router = express.Router();
 
-// Generate CV and Cover Letter from job description
 router.post('/generate', authMiddleware, async (req, res) => {
   try {
     console.log('STORAGE_PROVIDER:', process.env.STORAGE_PROVIDER);
     console.log('Using cloud generator:', !!process.env.STORAGE_PROVIDER);
+
     const { jobDescription, jdLink, jobTitle: providedJobTitle, companyName: providedCompanyName } = req.body;
 
     if (!jobDescription) {
       return res.status(400).json({ error: 'Job description is required' });
     }
 
-    // Get user profile - use parameterized queries appropriate for the database
     const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
-    
+
+    // ✅ Get user
     const user = await db.getOne(
       `SELECT id, email, full_name, address, phone_number, linkedin_profile, github_link, experience_years, credly_profile_link 
        FROM users WHERE id = ${paramPlaceholder}`,
       [req.user.id]
     );
 
-    // Employment history query differs between SQLite and PostgreSQL
-    let employmentHistory;
-    if (process.env.DATABASE_URL) {
-      // PostgreSQL version
-      employmentHistory = await db.getAll(
-        `SELECT * FROM employment_history WHERE user_id = $1 
-         ORDER BY 
-           CASE WHEN end_date IS NULL OR end_date = '' OR LOWER(end_date) = 'present' THEN 0 ELSE 1 END,
-           start_date DESC`,
-        [req.user.id]
-      );
-    } else {
-      // SQLite version
-      employmentHistory = await db.getAll(
-        `SELECT * FROM employment_history WHERE user_id = ? 
-         ORDER BY 
-           CASE WHEN end_date IS NULL OR end_date = "" OR LOWER(end_date) = "present" THEN 0 ELSE 1 END,
-           start_date DESC`,
-        [req.user.id]
-      );
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
+
+    // ✅ Fetch profile data
+    const employmentHistory = await db.getAll(
+      process.env.DATABASE_URL
+        ? `SELECT * FROM employment_history WHERE user_id = $1 
+           ORDER BY 
+             CASE WHEN end_date IS NULL OR end_date = '' OR LOWER(end_date) = 'present' THEN 0 ELSE 1 END,
+             start_date DESC`
+        : `SELECT * FROM employment_history WHERE user_id = ? 
+           ORDER BY 
+             CASE WHEN end_date IS NULL OR end_date = "" OR LOWER(end_date) = "present" THEN 0 ELSE 1 END,
+             start_date DESC`,
+      [req.user.id]
+    );
 
     const education = await db.getAll(
       `SELECT * FROM education WHERE user_id = ${paramPlaceholder} ORDER BY graduation_date DESC`,
@@ -94,33 +90,36 @@ router.post('/generate', authMiddleware, async (req, res) => {
       tags
     };
 
-    // Extract job details if not provided
+    // ✅ Extract job details
     let jobTitle = providedJobTitle;
     let companyName = providedCompanyName;
-    
+
     if (!jobTitle || !companyName || jobTitle === 'Unknown Position' || companyName === 'Unknown Company') {
       const extractedDetails = await extractJobDetails(jobDescription);
-      jobTitle = providedJobTitle && providedJobTitle !== 'Unknown Position' ? providedJobTitle : extractedDetails.jobTitle;
-      companyName = providedCompanyName && providedCompanyName !== 'Unknown Company' ? providedCompanyName : extractedDetails.companyName;
+      jobTitle = providedJobTitle && providedJobTitle !== 'Unknown Position'
+        ? providedJobTitle
+        : extractedDetails.jobTitle;
+
+      companyName = providedCompanyName && providedCompanyName !== 'Unknown Company'
+        ? providedCompanyName
+        : extractedDetails.companyName;
     }
 
-    // Generate CV content and cover letter using OpenAI
+    // ✅ Generate content
     const [cvContent, coverLetterContent] = await Promise.all([
       generateCVContent(userProfile, jobDescription),
       generateCoverLetter(userProfile, jobDescription, jobTitle, companyName)
     ]);
 
-    // Generate file names based on user name
     const resumeFilename = `${user.full_name}_Resume`;
     const coverLetterFilename = `${user.full_name}_Cover Letter`;
 
-    // Options for document generation
     const docOptions = {
       credlyProfileLink: user.credly_profile_link || null,
       tags: tags.map(t => t.tag)
     };
 
-    // Generate DOCX and PDF for both resume and cover letter
+    // ✅ Generate files
     const [docxResult, pdfResult, coverLetterDocxResult, coverLetterPdfResult] = await Promise.all([
       cvGenerator.generateDocx(cvContent, user, resumeFilename, docOptions),
       cvGenerator.generatePdf(cvContent, user, resumeFilename, docOptions),
@@ -128,7 +127,16 @@ router.post('/generate', authMiddleware, async (req, res) => {
       cvGenerator.generateCoverLetterPdf(coverLetterContent, user, coverLetterFilename)
     ]);
 
-    // Save application record
+    console.log('PDF RESULT:', pdfResult);
+
+    // 🚨 Ensure cloud upload worked
+    if (process.env.STORAGE_PROVIDER) {
+      if (!pdfResult?.url || !docxResult?.url) {
+        throw new Error('Cloud upload failed: missing file URLs');
+      }
+    }
+
+    // ✅ Save application
     let result;
     if (process.env.DATABASE_URL) {
       result = await db.runQuery(
@@ -164,19 +172,37 @@ router.post('/generate', authMiddleware, async (req, res) => {
       );
     }
 
-    const appId = result.lastID || result.id;
+    // ✅ FIXED: Get appId correctly
+    let appId;
+
+    if (process.env.DATABASE_URL) {
+      appId = result.rows?.[0]?.id;
+    } else {
+      appId = result.lastID;
+    }
+
+    if (!appId) {
+      console.error('Insert result:', result);
+      throw new Error('Failed to retrieve application ID');
+    }
+
+    // ✅ Fetch application
     const application = await db.getOne(
-      `SELECT * FROM applications WHERE id = ${paramPlaceholder}`, 
+      `SELECT * FROM applications WHERE id = ${paramPlaceholder}`,
       [appId]
     );
 
-    // Build URLs - use cloud URLs if available, otherwise local paths
+    if (!application) {
+      throw new Error('Application not found after insert');
+    }
+
+    // ✅ Build URLs
     const cvDocUrl = docxResult.url || `/uploads/${docxResult.filename}`;
     const cvPdfUrl = pdfResult.url || `/uploads/${pdfResult.filename}`;
     const coverLetterDocUrl = coverLetterDocxResult.url || `/uploads/${coverLetterDocxResult.filename}`;
     const coverLetterPdfUrl = coverLetterPdfResult.url || `/uploads/${coverLetterPdfResult.filename}`;
 
-    res.json({
+    return res.json({
       message: 'Resume and Cover Letter generated successfully',
       application: {
         id: application.id,
@@ -191,9 +217,12 @@ router.post('/generate', authMiddleware, async (req, res) => {
       cvContent,
       coverLetterContent
     });
+
   } catch (error) {
     console.error('CV generation error:', error);
-    res.status(500).json({ error: error.message || 'Failed to generate documents' });
+    return res.status(500).json({
+      error: error.message || 'Failed to generate documents'
+    });
   }
 });
 
