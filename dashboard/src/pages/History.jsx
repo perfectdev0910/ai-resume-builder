@@ -93,6 +93,52 @@ export default function History() {
     fetchApplications('');
   };
 
+  const buildFileUrl = (url) => {
+    if (!url) return null;
+
+    // If already full Supabase or external URL → return as-is
+    if (url.startsWith('http')) return url;
+
+    // Remove duplicate /uploads if present
+    let cleanPath = url.replace(/^\/?uploads\//, '/uploads/');
+
+    // Remove /api from base URL if exists
+    const cleanBase = BASE_URL.replace(/\/api$/, '');
+
+    return `${cleanBase}${cleanPath}`;
+  };
+
+  const handleDownload = async (url, filename) => {
+    try {
+      if (!url) return;
+
+      const fullUrl = buildFileUrl(url);
+
+      const res = await fetch(fullUrl, {
+        credentials: 'include', // important if auth is used
+      });
+
+      if (!res.ok) throw new Error('Download failed');
+
+      const blob = await res.blob();
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+
+      link.href = blobUrl;
+      link.download = filename;
+
+      document.body.appendChild(link);
+      link.click();
+
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to download file');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -224,25 +270,35 @@ export default function History() {
                   {/* Resume Downloads */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
+
                     {app.cvDocUrl && (
-                      <a
-                        href={`${BASE_URL}${app.cvDocUrl}`}
-                        download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`}
+                      <button
+                        onClick={() =>
+                          handleDownload(
+                            app.cvDocUrl,
+                            `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`
+                          )
+                        }
                         className="btn btn-secondary py-1 px-2 text-xs"
                         title="Download Resume DOCX"
                       >
                         DOCX
-                      </a>
+                      </button>
                     )}
+
                     {app.cvPdfUrl && (
-                      <a
-                        href={`${BASE_URL}${app.cvPdfUrl}`}
-                        download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`}
+                      <button
+                        onClick={() =>
+                          handleDownload(
+                            app.cvPdfUrl,
+                            `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`
+                          )
+                        }
                         className="btn btn-secondary py-1 px-2 text-xs"
                         title="Download Resume PDF"
                       >
                         PDF
-                      </a>
+                      </button>
                     )}
                   </div>
                   
@@ -250,25 +306,35 @@ export default function History() {
                   {(app.coverLetterDocUrl || app.coverLetterPdfUrl) && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500 w-16">Cover:</span>
+
                       {app.coverLetterDocUrl && (
-                        <a
-                          href={`${BASE_URL}${app.coverLetterDocUrl}`}
-                          download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`}
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              app.coverLetterDocUrl,
+                              `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`
+                            )
+                          }
                           className="btn btn-secondary py-1 px-2 text-xs"
                           title="Download Cover Letter DOCX"
                         >
                           DOCX
-                        </a>
+                        </button>
                       )}
+
                       {app.coverLetterPdfUrl && (
-                        <a
-                          href={`${BASE_URL}${app.coverLetterPdfUrl}`}
-                          download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`}
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              app.coverLetterPdfUrl,
+                              `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`
+                            )
+                          }
                           className="btn btn-secondary py-1 px-2 text-xs"
                           title="Download Cover Letter PDF"
                         >
                           PDF
-                        </a>
+                        </button>
                       )}
                     </div>
                   )}
