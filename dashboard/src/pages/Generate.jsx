@@ -92,6 +92,30 @@ export default function Generate() {
   
   const fullName = sanitizeFilename(user?.full_name || 'User');
 
+  const handleDownload = async (url, filename) => {
+  try {
+    if (!url) return;
+
+    const response = await fetch(url);
+    const blob = await response.blob();
+
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = blobUrl;
+    link.download = filename;
+
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    console.error('Download failed:', err);
+    setError('Failed to download file');
+  }
+};
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -139,26 +163,31 @@ export default function Generate() {
               <div className="mt-4">
                 <h4 className="text-sm font-semibold text-green-800 mb-2">Resume</h4>
                 <div className="flex gap-3">
-                  <a
-                    href={result.application?.cvDocUrl}
-                    download={`${fullName}_Resume.docx`}
+
+                  <button
+                    onClick={() =>
+                      handleDownload(
+                        result.application?.cvDocUrl,
+                        `${fullName}_Resume.docx`
+                      )
+                    }
                     className="btn bg-green-600 text-white hover:bg-green-700"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
                     DOCX
-                  </a>
-                  <a
-                    href={result.application?.cvPdfUrl}
-                    download={`${fullName}_Resume.pdf`}
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      handleDownload(
+                        result.application?.cvPdfUrl,
+                        `${fullName}_Resume.pdf`
+                      )
+                    }
                     className="btn bg-white text-green-700 border border-green-300 hover:bg-green-50"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
                     PDF
-                  </a>
+                  </button>
+
                 </div>
               </div>
               
@@ -166,26 +195,31 @@ export default function Generate() {
               <div className="mt-4">
                 <h4 className="text-sm font-semibold text-green-800 mb-2">Cover Letter</h4>
                 <div className="flex gap-3">
-                  <a
-                    href={result.application?.coverLetterDocUrl}
-                    download={`${fullName}_Cover_Letter.docx`}
+
+                  <button
+                    onClick={() =>
+                      handleDownload(
+                        result.application?.coverLetterDocUrl,
+                        `${fullName}_Cover_Letter.docx`
+                      )
+                    }
                     className="btn bg-green-600 text-white hover:bg-green-700"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
                     DOCX
-                  </a>
-                  <a
-                    href={result.application?.coverLetterPdfUrl}
-                    download={`${fullName}_Cover_Letter.pdf`}
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      handleDownload(
+                        result.application?.coverLetterPdfUrl,
+                        `${fullName}_Cover_Letter.pdf`
+                      )
+                    }
                     className="btn bg-white text-green-700 border border-green-300 hover:bg-green-50"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
                     PDF
-                  </a>
+                  </button>
+
                 </div>
               </div>
               
