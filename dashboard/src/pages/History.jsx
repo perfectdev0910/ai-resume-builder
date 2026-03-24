@@ -4,6 +4,8 @@ import { format, parseISO } from 'date-fns';
 import { toZonedTime, format as formatTz } from 'date-fns-tz';
 import { useAuth } from '../contexts/AuthContext';
 
+const BASE_URL = import.meta.env.VITE_API_URL
+
 // Helper to sanitize filename
 const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
 
@@ -224,7 +226,7 @@ export default function History() {
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
                     {app.cvDocUrl && (
                       <a
-                        href={app.cvDocUrl}
+                        href={`${BASE_URL}${app.cvDocUrl}`}
                         download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`}
                         className="btn btn-secondary py-1 px-2 text-xs"
                         title="Download Resume DOCX"
@@ -234,7 +236,7 @@ export default function History() {
                     )}
                     {app.cvPdfUrl && (
                       <a
-                        href={app.cvPdfUrl}
+                        href={`${BASE_URL}${app.cvPdfUrl}`}
                         download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`}
                         className="btn btn-secondary py-1 px-2 text-xs"
                         title="Download Resume PDF"
@@ -250,7 +252,7 @@ export default function History() {
                       <span className="text-xs text-gray-500 w-16">Cover:</span>
                       {app.coverLetterDocUrl && (
                         <a
-                          href={app.coverLetterDocUrl}
+                          href={`${BASE_URL}${app.coverLetterDocUrl}`}
                           download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`}
                           className="btn btn-secondary py-1 px-2 text-xs"
                           title="Download Cover Letter DOCX"
@@ -260,7 +262,7 @@ export default function History() {
                       )}
                       {app.coverLetterPdfUrl && (
                         <a
-                          href={app.coverLetterPdfUrl}
+                          href={`${BASE_URL}${app.coverLetterPdfUrl}`}
                           download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`}
                           className="btn btn-secondary py-1 px-2 text-xs"
                           title="Download Cover Letter PDF"
