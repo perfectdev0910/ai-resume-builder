@@ -220,10 +220,10 @@ router.get('/', authMiddleware, async (req, res) => {
       appliedAt: app.applied_at,
       appliedAtTimezone: userTimezone,
       status: app.status,
-      cvDocUrl: app.cv_doc_path ? `/uploads/${app.cv_doc_path}` : null,
-      cvPdfUrl: app.cv_pdf_path ? `/uploads/${app.cv_pdf_path}` : null,
-      coverLetterDocUrl: app.cover_letter_doc_path ? `/uploads/${app.cover_letter_doc_path}` : null,
-      coverLetterPdfUrl: app.cover_letter_pdf_path ? `/uploads/${app.cover_letter_pdf_path}` : null,
+      cvDocUrl: app.cv_doc_url || null,
+      cvPdfUrl: app.cv_pdf_url || null,
+      coverLetterDocUrl: app.cover_letter_doc_url || null,
+      coverLetterPdfUrl: app.cover_letter_pdf_url || null,
       notes: app.notes
     }));
 

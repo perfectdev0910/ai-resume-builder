@@ -197,10 +197,10 @@ router.post('/generate', authMiddleware, async (req, res) => {
     }
 
     // ✅ Build URLs
-    const cvDocUrl = docxResult.url || `/uploads/${docxResult.filename}`;
-    const cvPdfUrl = pdfResult.url || `/uploads/${pdfResult.filename}`;
-    const coverLetterDocUrl = coverLetterDocxResult.url || `/uploads/${coverLetterDocxResult.filename}`;
-    const coverLetterPdfUrl = coverLetterPdfResult.url || `/uploads/${coverLetterPdfResult.filename}`;
+    const cvDocUrl = docxResult.url;
+    const cvPdfUrl = pdfResult.url;
+    const coverLetterDocUrl = coverLetterDocxResult.url;
+    const coverLetterPdfUrl = coverLetterPdfResult.url;
 
     return res.json({
       message: 'Resume and Cover Letter generated successfully',

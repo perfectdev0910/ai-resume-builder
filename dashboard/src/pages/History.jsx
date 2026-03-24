@@ -4,8 +4,6 @@ import { format, parseISO } from 'date-fns';
 import { toZonedTime, format as formatTz } from 'date-fns-tz';
 import { useAuth } from '../contexts/AuthContext';
 
-const BASE_URL = import.meta.env.VITE_API_URL
-
 // Helper to sanitize filename
 const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
 
@@ -93,51 +91,29 @@ export default function History() {
     fetchApplications('');
   };
 
-  const buildFileUrl = (url) => {
-    if (!url) return null;
-
-    // If already full Supabase or external URL → return as-is
-    if (url.startsWith('http')) return url;
-
-    // Remove duplicate /uploads if present
-    let cleanPath = url.replace(/^\/?uploads\//, '/uploads/');
-
-    // Remove /api from base URL if exists
-    const cleanBase = BASE_URL.replace(/\/api$/, '');
-
-    return `${cleanBase}${cleanPath}`;
-  };
-
   const handleDownload = async (url, filename) => {
-    try {
-      if (!url) return;
+  try {
+    if (!url) return;
 
-      const fullUrl = buildFileUrl(url);
+    const response = await fetch(url);
+    const blob = await response.blob();
 
-      const res = await fetch(fullUrl, {
-        credentials: 'include', // important if auth is used
-      });
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
 
-      if (!res.ok) throw new Error('Download failed');
+    link.href = blobUrl;
+    link.download = filename;
 
-      const blob = await res.blob();
+    document.body.appendChild(link);
+    link.click();
 
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-
-      link.href = blobUrl;
-      link.download = filename;
-
-      document.body.appendChild(link);
-      link.click();
-
-      link.remove();
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.error(err);
-      alert('Failed to download file');
-    }
-  };
+    link.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    console.error('Download failed:', err);
+    setError('Failed to download file');
+  }
+};
 
   return (
     <div className="space-y-6">
