@@ -91,29 +91,47 @@ export default function History() {
     fetchApplications('');
   };
 
+  const buildFileUrl = (url) => {
+    if (!url) return null;
+
+    // Cloud storage (Supabase / R2)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+
+    // Local storage
+    return `${process.env.REACT_APP_API_URL}/uploads/${url}`;
+  };
+
   const handleDownload = async (url, filename) => {
-  try {
-    if (!url) return;
+    try {
+      if (!url) return;
 
-    const response = await fetch(url);
-    const blob = await response.blob();
+      const finalUrl = buildFileUrl(url);
 
-    const blobUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
+      const response = await fetch(finalUrl);
 
-    link.href = blobUrl;
-    link.download = filename;
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
 
-    document.body.appendChild(link);
-    link.click();
+      const blob = await response.blob();
 
-    link.remove();
-    window.URL.revokeObjectURL(blobUrl);
-  } catch (err) {
-    console.error('Download failed:', err);
-    setError('Failed to download file');
-  }
-};
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+
+      link.href = blobUrl;
+      link.download = filename;
+
+      document.body.appendChild(link);
+      link.click();
+
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Download failed:', err);
+    }
+  };
 
   return (
     <div className="space-y-6">
