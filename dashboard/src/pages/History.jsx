@@ -236,7 +236,7 @@ export default function History() {
                     <button
                       onClick={() =>
                         handleDownload(
-                          applicationsAPI.downloadDocUrl(app.id),
+                          cvAPI.downloadDocUrl(app.id),
                           `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`
                         )
                       }
