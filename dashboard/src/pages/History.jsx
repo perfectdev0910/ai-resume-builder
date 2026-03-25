@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { applicationsAPI } from '../utils/api';
+import { applicationsAPI, cvAPI } from '../utils/api';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime, format as formatTz } from 'date-fns-tz';
 import { useAuth } from '../contexts/AuthContext';
