@@ -316,15 +316,27 @@ function sanitizeDownloadFilename(name) {
   return name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
 }
 
+// Helper function to validate applicationId
+function validateApplicationId(applicationId) {
+  if (!applicationId || isNaN(parseInt(applicationId))) {
+    return null;
+  }
+  return parseInt(applicationId);
+}
+
 // Download endpoints for cloud storage - redirect to cloud URLs
 router.get('/download/docx/:applicationId', authMiddleware, async (req, res) => {
   try {
+     const applicationId = validateApplicationId(req.params.applicationId);
+    if (!applicationId) {
+      return res.status(400).json({ error: 'Invalid application ID' });
+    }
     const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
     const param2 = process.env.DATABASE_URL ? '$2' : '?';
     
     const application = await db.getOne(
       `SELECT * FROM applications WHERE id = ${paramPlaceholder} AND user_id = ${param2}`,
-      [req.params.applicationId, req.user.id]
+      [applicationId, req.user.id]
     );
 
     if (!application) {
@@ -354,12 +366,17 @@ router.get('/download/docx/:applicationId', authMiddleware, async (req, res) => 
 
 router.get('/download/pdf/:applicationId', authMiddleware, async (req, res) => {
   try {
+     const applicationId = validateApplicationId(req.params.applicationId);
+    if (!applicationId) {
+      return res.status(400).json({ error: 'Invalid application ID' });
+    }
+    
     const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
     const param2 = process.env.DATABASE_URL ? '$2' : '?';
     
     const application = await db.getOne(
       `SELECT * FROM applications WHERE id = ${paramPlaceholder} AND user_id = ${param2}`,
-      [req.params.applicationId, req.user.id]
+      [applicationId, req.user.id]
     );
 
     if (!application) {
@@ -387,12 +404,17 @@ router.get('/download/pdf/:applicationId', authMiddleware, async (req, res) => {
 
 router.get('/download/cover-letter/docx/:applicationId', authMiddleware, async (req, res) => {
   try {
+    const applicationId = validateApplicationId(req.params.applicationId);
+    if (!applicationId) {
+      return res.status(400).json({ error: 'Invalid application ID' });
+    }
+    
     const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
     const param2 = process.env.DATABASE_URL ? '$2' : '?';
     
     const application = await db.getOne(
       `SELECT * FROM applications WHERE id = ${paramPlaceholder} AND user_id = ${param2}`,
-      [req.params.applicationId, req.user.id]
+      [applicationId, req.user.id]
     );
 
     if (!application || !application.cover_letter_doc_url) {
@@ -419,12 +441,17 @@ router.get('/download/cover-letter/docx/:applicationId', authMiddleware, async (
 
 router.get('/download/cover-letter/pdf/:applicationId', authMiddleware, async (req, res) => {
   try {
+    const applicationId = validateApplicationId(req.params.applicationId);
+    if (!applicationId) {
+      return res.status(400).json({ error: 'Invalid application ID' });
+    }
+    
     const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
     const param2 = process.env.DATABASE_URL ? '$2' : '?';
     
     const application = await db.getOne(
       `SELECT * FROM applications WHERE id = ${paramPlaceholder} AND user_id = ${param2}`,
-      [req.params.applicationId, req.user.id]
+      [applicationId, req.user.id]
     );
 
     if (!application || !application.cover_letter_pdf_url) {
