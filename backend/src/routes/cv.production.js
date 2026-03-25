@@ -140,7 +140,7 @@ router.post('/generate', authMiddleware, async (req, res) => {
     let result;
     if (process.env.DATABASE_URL) {
       result = await db.runQuery(
-        `INSERT INTO applications (user_id, job_title, company_name, jd_link, jd_content, cv_doc_path, cv_pdf_path, cover_letter_doc_path, cover_letter_pdf_path)
+        `INSERT INTO applications (user_id, job_title, company_name, jd_link, jd_content, cv_doc_url, cv_pdf_url, cover_letter_doc_url, cover_letter_pdf_url)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
         [
           req.user.id,
@@ -148,15 +148,15 @@ router.post('/generate', authMiddleware, async (req, res) => {
           companyName,
           jdLink || '',
           jobDescription,
-          docxResult.filename,
-          pdfResult.filename,
-          coverLetterDocxResult.filename,
-          coverLetterPdfResult.filename
+          docxResult.url,
+          pdfResult.url,
+          coverLetterDocxResult.url,
+          coverLetterPdfResult.url
         ]
       );
     } else {
       result = await db.runQuery(
-        `INSERT INTO applications (user_id, job_title, company_name, jd_link, jd_content, cv_doc_path, cv_pdf_path, cover_letter_doc_path, cover_letter_pdf_path)
+        `INSERT INTO applications (user_id, job_title, company_name, jd_link, jd_content, cv_doc_url, cv_pdf_url, cover_letter_doc_url, cover_letter_pdf_url)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           req.user.id,
@@ -164,10 +164,10 @@ router.post('/generate', authMiddleware, async (req, res) => {
           companyName,
           jdLink || '',
           jobDescription,
-          docxResult.filename,
-          pdfResult.filename,
-          coverLetterDocxResult.filename,
-          coverLetterPdfResult.filename
+          docxResult.url,
+          pdfResult.url,
+          coverLetterDocxResult.url,
+          coverLetterPdfResult.url
         ]
       );
     }
@@ -333,7 +333,7 @@ router.get('/download/docx/:applicationId', authMiddleware, async (req, res) => 
 
     // For cloud storage, redirect to the cloud URL
     if (storage) {
-      const url = storage.getFileUrl(application.cv_doc_path);
+      const url = application.cv_doc_url;
       return res.redirect(url);
     }
 
@@ -367,7 +367,7 @@ router.get('/download/pdf/:applicationId', authMiddleware, async (req, res) => {
     }
 
     if (storage) {
-      const url = storage.getFileUrl(application.cv_pdf_path);
+      const url =application.cv_pdf_url;
       return res.redirect(url);
     }
 
@@ -378,7 +378,7 @@ router.get('/download/pdf/:applicationId', authMiddleware, async (req, res) => {
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Resume.pdf`;
     
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cv_pdf_path}`);
+    res.redirect(`/uploads/${application.cv_pdf_url}`);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -395,12 +395,12 @@ router.get('/download/cover-letter/docx/:applicationId', authMiddleware, async (
       [req.params.applicationId, req.user.id]
     );
 
-    if (!application || !application.cover_letter_doc_path) {
+    if (!application || !application.cover_letter_doc_url) {
       return res.status(404).json({ error: 'Cover letter not found' });
     }
 
     if (storage) {
-      const url = storage.getFileUrl(application.cover_letter_doc_path);
+      const url = application.cover_letter_doc_url;
       return res.redirect(url);
     }
 
@@ -411,7 +411,6 @@ router.get('/download/cover-letter/docx/:applicationId', authMiddleware, async (
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Cover_Letter.docx`;
     
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cover_letter_doc_path}`);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -428,12 +427,12 @@ router.get('/download/cover-letter/pdf/:applicationId', authMiddleware, async (r
       [req.params.applicationId, req.user.id]
     );
 
-    if (!application || !application.cover_letter_pdf_path) {
+    if (!application || !application.cover_letter_pdf_url) {
       return res.status(404).json({ error: 'Cover letter not found' });
     }
 
     if (storage) {
-      const url = storage.getFileUrl(application.cover_letter_pdf_path);
+      const url = application.cover_letter_pdf_url;
       return res.redirect(url);
     }
 
@@ -444,7 +443,7 @@ router.get('/download/cover-letter/pdf/:applicationId', authMiddleware, async (r
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Cover_Letter.pdf`;
     
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cover_letter_pdf_path}`);
+    res.redirect(`/uploads/${application.cover_letter_pdf_url}`);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });

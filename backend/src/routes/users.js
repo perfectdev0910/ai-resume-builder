@@ -1192,8 +1192,8 @@ router.get('/admin/applications', authMiddleware, adminMiddleware, async (req, r
         companyName: app.company_name,
         appliedAt: app.applied_at,
         status: app.status,
-        cvDocUrl: app.cv_doc_path ? `/uploads/${app.cv_doc_path}` : null,
-        cvPdfUrl: app.cv_pdf_path ? `/uploads/${app.cv_pdf_path}` : null
+        cvDocUrl: app.cv_doc_url || null,
+        cvPdfUrl: app.cv_pdf_url || null
       })),
       total: Number(totalCount?.count || 0),
       page: pageNum,

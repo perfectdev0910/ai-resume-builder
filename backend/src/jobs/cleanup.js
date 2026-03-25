@@ -32,10 +32,10 @@ async function cleanupOldFiles() {
     // Delete files from cloud storage
     for (const app of oldApplications) {
       const filesToDelete = [
-        app.cv_doc_path,
-        app.cv_pdf_path,
-        app.cover_letter_doc_path,
-        app.cover_letter_pdf_path
+        app.cv_doc_url,
+        app.cv_pdf_url,
+        app.cover_letter_doc_url,
+        app.cover_letter_pdf_url
       ].filter(Boolean);
 
       for (const filePath of filesToDelete) {

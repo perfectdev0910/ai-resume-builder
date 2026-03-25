@@ -148,10 +148,10 @@ function initDatabase() {
           company_name TEXT,
           jd_link TEXT,
           jd_content TEXT,
-          cv_doc_path TEXT,
-          cv_pdf_path TEXT,
-          cover_letter_doc_path TEXT,
-          cover_letter_pdf_path TEXT,
+          cv_doc_url TEXT,
+          cv_pdf_url TEXT,
+          cover_letter_doc_url TEXT,
+          cover_letter_pdf_url TEXT,
           applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           status TEXT DEFAULT 'generated',
           notes TEXT,
@@ -160,8 +160,8 @@ function initDatabase() {
       `);
 
       // Add cover letter columns if they don't exist (for existing databases)
-      database.run(`ALTER TABLE applications ADD COLUMN cover_letter_doc_path TEXT`, (err) => {});
-      database.run(`ALTER TABLE applications ADD COLUMN cover_letter_pdf_path TEXT`, (err) => {
+      database.run(`ALTER TABLE applications ADD COLUMN cover_letter_doc_url TEXT`, (err) => {});
+      database.run(`ALTER TABLE applications ADD COLUMN cover_letter_pdf_url TEXT`, (err) => {
         if (err && !err.message.includes('duplicate')) reject(err);
         else resolve();
       });

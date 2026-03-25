@@ -194,10 +194,10 @@ async function initDatabase() {
         company_name VARCHAR(255),
         jd_link TEXT,
         jd_content TEXT,
-        cv_doc_path VARCHAR(255),
-        cv_pdf_path VARCHAR(255),
-        cover_letter_doc_path VARCHAR(255),
-        cover_letter_pdf_path VARCHAR(255),
+        cv_doc_url VARCHAR(255),
+        cv_pdf_url VARCHAR(255),
+        cover_letter_doc_url VARCHAR(255),
+        cover_letter_pdf_url VARCHAR(255),
         status VARCHAR(50) DEFAULT 'applied',
         notes TEXT,
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -313,10 +313,10 @@ async function cleanupOldApplications(days = 60) {
 
   for (const app of oldApps) {
     try {
-      if (app.cv_doc_path) await storage.deleteFile(app.cv_doc_path);
-      if (app.cv_pdf_path) await storage.deleteFile(app.cv_pdf_path);
-      if (app.cover_letter_doc_path) await storage.deleteFile(app.cover_letter_doc_path);
-      if (app.cover_letter_pdf_path) await storage.deleteFile(app.cover_letter_pdf_path);
+      if (app.cv_doc_url) await storage.deleteFile(app.cv_doc_url);
+      if (app.cv_pdf_url) await storage.deleteFile(app.cv_pdf_url);
+      if (app.cover_letter_doc_url) await storage.deleteFile(app.cover_letter_doc_url);
+      if (app.cover_letter_pdf_url) await storage.deleteFile(app.cover_letter_pdf_url);
     } catch (err) {
       console.error('File cleanup error:', err);
     }

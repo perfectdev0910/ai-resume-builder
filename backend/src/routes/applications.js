@@ -325,8 +325,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
         jdContent: application.jd_content,
         appliedAt: application.applied_at,
         status: application.status,
-        cvDocUrl: application.cv_doc_path ? `/uploads/${application.cv_doc_path}` : null,
-        cvPdfUrl: application.cv_pdf_path ? `/uploads/${application.cv_pdf_path}` : null,
+        cvDocUrl: application.cv_doc_url || null,
+        cvPdfUrl: application.cv_pdf_url || null,
         notes: application.notes
       }
     });
@@ -374,10 +374,10 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     }
 
     await Promise.all([
-      deleteFileIfExists(application.cv_doc_path),
-      deleteFileIfExists(application.cv_pdf_path),
-      deleteFileIfExists(application.cover_letter_doc_path),
-      deleteFileIfExists(application.cover_letter_pdf_path)
+      deleteFileIfExists(application.cv_doc_url),
+      deleteFileIfExists(application.cv_pdf_url),
+      deleteFileIfExists(application.cover_letter_doc_url),
+      deleteFileIfExists(application.cover_letter_pdf_url)
     ]);
 
     await runQueryCompat(
