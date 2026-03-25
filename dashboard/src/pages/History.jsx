@@ -91,46 +91,14 @@ export default function History() {
     fetchApplications('');
   };
 
-  const buildFileUrl = (url) => {
-    if (!url) return null;
+  const handleDownload = (url, filename) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
 
-    // Cloud storage (Supabase / R2)
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      return url;
-    }
-
-    // Local storage
-    return `${process.env.REACT_APP_API_URL}/uploads/${url}`;
-  };
-
-  const handleDownload = async (url, filename) => {
-    try {
-      if (!url) return;
-
-      const finalUrl = buildFileUrl(url);
-
-      const response = await fetch(finalUrl);
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
-      const blob = await response.blob();
-
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-
-      link.href = blobUrl;
-      link.download = filename;
-
-      document.body.appendChild(link);
-      link.click();
-
-      link.remove();
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.error('Download failed:', err);
-    }
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   return (
