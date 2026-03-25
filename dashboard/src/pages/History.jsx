@@ -1,11 +1,41 @@
 import { useState, useEffect } from 'react';
-import { applicationsAPI, cvAPI, API_BASE_URL } from '../utils/api';
+import { applicationsAPI, cvAPI } from '../utils/api';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime, format as formatTz } from 'date-fns-tz';
 import { useAuth } from '../contexts/AuthContext';
 
 // Helper to sanitize filename
 const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
+
+
+// Download helper function that includes auth token
+const downloadFile = async (url, filename) => {
+  try {
+    const token = localStorage.getItem('authToken');
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Download failed');
+    }
+    
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(downloadUrl);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Download error:', error);
+    alert('Failed to download file. Please try again.');
+  }
+};
 
 export default function History() {
   const { user } = useAuth();
@@ -227,43 +257,39 @@ export default function History() {
                   {/* Resume Downloads */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
-                    <a
-                      href={cvAPI.downloadDocUrl(app.id)}
-                      download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`}
+                    <button
+                      onClick={() => downloadFile(cvAPI.downloadDocUrl(app.id), `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`)}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Resume DOCX"
                     >
                       DOCX
-                    </a>
-                    <a
-                      href={cvAPI.downloadPdfUrl(app.id)}
-                      download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`}
+                    </button>
+                    <button
+                      onClick={() => downloadFile(cvAPI.downloadPdfUrl(app.id), `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`)}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Resume PDF"
                     >
                       PDF
-                    </a>
+                    </button>
                   </div>
                   
                   {/* Cover Letter Downloads */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Cover:</span>
-                    <a
-                      href={cvAPI.downloadCoverLetterDocUrl(app.id)}
-                      download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`}
+                    <button
+                      onClick={() => downloadFile(cvAPI.downloadCoverLetterDocUrl(app.id), `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`)}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Cover Letter DOCX"
                     >
                       DOCX
-                    </a>
-                    <a
-                      href={cvAPI.downloadCoverLetterPdfUrl(app.id)}
-                      download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`}
+                     </button>
+                    <button
+                      onClick={() => downloadFile(cvAPI.downloadCoverLetterPdfUrl(app.id), `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`)}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Cover Letter PDF"
                     >
                       PDF
-                    </a>
+                    </button>
                   </div>
                   
                   {/* Delete Button */}
