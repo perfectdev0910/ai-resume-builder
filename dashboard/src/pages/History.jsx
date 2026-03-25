@@ -10,16 +10,20 @@ const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/
 
 // Download helper function that includes auth token
 const downloadFile = async (url, filename) => {
-  
   try {
-
-    if (!url || url.includes('undefined') || !applicationId) {
-      console.error('Invalid download - URL:', url, 'ID:', applicationId);
-      alert('Download not available. Application ID is missing.');
+    // Validate URL
+    if (!url || url.includes('undefined') || url.includes(':path') || url.endsWith('/')) {
+      console.error('Invalid download URL:', url);
+      alert('Download not available. Please refresh the page.');
       return;
     }
     
     const token = localStorage.getItem('authToken');
+    if (!token) {
+      alert('Please log in again to download files.');
+      return;
+    }
+    
     const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -27,7 +31,9 @@ const downloadFile = async (url, filename) => {
     });
     
     if (!response.ok) {
-      throw new Error('Download failed');
+      const errorText = await response.text();
+      console.error('Download failed:', response.status, errorText);
+      throw new Error(`Download failed: ${response.status}`);
     }
     
     const blob = await response.blob();
