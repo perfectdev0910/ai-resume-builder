@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { applicationsAPI, cvAPI } from '../utils/api';
+import { applicationsAPI } from '../utils/api';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime, format as formatTz } from 'date-fns-tz';
 import { useAuth } from '../contexts/AuthContext';
@@ -91,37 +91,6 @@ export default function History() {
     fetchApplications('');
   };
 
-  const handleDownload = async (url, filename) => {
-    try {
-      const token = localStorage.getItem('authToken');
-
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Unauthorized or failed download');
-      }
-
-      const blob = await response.blob();
-
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-
-      link.href = blobUrl;
-      link.download = filename;
-
-      document.body.appendChild(link);
-      link.click();
-
-      link.remove();
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.error('Download failed:', err);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -254,32 +223,25 @@ export default function History() {
                   {/* Resume Downloads */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
-
-                    <button
-                      onClick={() =>
-                        handleDownload(
-                          cvAPI.downloadDocUrl(app.id),
-                          `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`
-                        )
-                      }
-                      className="btn btn-secondary py-1 px-2 text-xs"
-                    >
-                      DOCX
-                    </button>
-
+                    {app.cvDocUrl && (
+                      <a
+                        href={app.cvDocUrl}
+                        download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`}
+                        className="btn btn-secondary py-1 px-2 text-xs"
+                        title="Download Resume DOCX"
+                      >
+                        DOCX
+                      </a>
+                    )}
                     {app.cvPdfUrl && (
-                      <button
-                        onClick={() =>
-                          handleDownload(
-                            app.cvPdfUrl,
-                            `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`
-                          )
-                        }
+                      <a
+                        href={app.cvPdfUrl}
+                        download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`}
                         className="btn btn-secondary py-1 px-2 text-xs"
                         title="Download Resume PDF"
                       >
                         PDF
-                      </button>
+                      </a>
                     )}
                   </div>
                   
@@ -287,35 +249,25 @@ export default function History() {
                   {(app.coverLetterDocUrl || app.coverLetterPdfUrl) && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500 w-16">Cover:</span>
-
                       {app.coverLetterDocUrl && (
-                        <button
-                          onClick={() =>
-                            handleDownload(
-                              app.coverLetterDocUrl,
-                              `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`
-                            )
-                          }
+                        <a
+                          href={app.coverLetterDocUrl}
+                          download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`}
                           className="btn btn-secondary py-1 px-2 text-xs"
                           title="Download Cover Letter DOCX"
                         >
                           DOCX
-                        </button>
+                        </a>
                       )}
-
                       {app.coverLetterPdfUrl && (
-                        <button
-                          onClick={() =>
-                            handleDownload(
-                              app.coverLetterPdfUrl,
-                              `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`
-                            )
-                          }
+                        <a
+                          href={app.coverLetterPdfUrl}
+                          download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`}
                           className="btn btn-secondary py-1 px-2 text-xs"
                           title="Download Cover Letter PDF"
                         >
                           PDF
-                        </button>
+                        </a>
                       )}
                     </div>
                   )}
