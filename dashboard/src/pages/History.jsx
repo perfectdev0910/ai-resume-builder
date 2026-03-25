@@ -61,6 +61,14 @@ export default function History() {
   const [searchQuery, setSearchQuery] = useState('');
   const [userTimezone, setUserTimezone] = useState('UTC');
 
+    // Debug: log applications when they change
+  useEffect(() => {
+    console.log('Applications updated:', applications);
+    applications.forEach(app => {
+      console.log(`App ${app.id}: jobTitle="${app.jobTitle}", companyName="${app.companyName}"`);
+    });
+  }, [applications]);
+
   useEffect(() => {
     fetchApplications();
   }, [pagination.page, filter]);
