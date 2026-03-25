@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { applicationsAPI } from '../utils/api';
+import { applicationsAPI, cvAPI, API_BASE_URL } from '../utils/api';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime, format as formatTz } from 'date-fns-tz';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,18 +39,22 @@ export default function History() {
       }
 
       const response = await applicationsAPI.getAll(params);
-      setApplications(response.data.applications);
+      
+      // Safely handle response data
+      const apps = response.data?.applications || [];
+      setApplications(Array.isArray(apps) ? apps : []);
       setPagination(prev => ({
         ...prev,
-        total: response.data.pagination.total,
-        totalPages: response.data.pagination.totalPages
+        total: response.data?.pagination?.total || 0,
+        totalPages: response.data?.pagination?.totalPages || 1
       }));
       // Set user timezone from response
-      if (response.data.userTimezone) {
+      if (response.data?.userTimezone) {
         setUserTimezone(response.data.userTimezone);
       }
     } catch (error) {
       console.error('Failed to fetch applications:', error);
+      setApplications([]);
     } finally {
       setLoading(false);
     }
@@ -168,7 +172,7 @@ export default function History() {
 
       {/* Stats Summary */}
       <div className="flex items-center justify-between text-sm text-gray-500">
-        <span>Showing {applications.length} of {pagination.total} applications</span>
+        <span>Showing {applications?.length || 0} of {pagination?.total || 0} applications</span>
         <span className="text-xs">Timezone: {userTimezone}</span>
       </div>
 
@@ -177,7 +181,7 @@ export default function History() {
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
         </div>
-      ) : applications.length > 0 ? (
+      ) : (applications && applications.length > 0) ? (
         <div className="space-y-4">
           {applications.map(app => (
             <div key={app.id} className="card p-6 hover:shadow-md transition-shadow">
@@ -223,54 +227,44 @@ export default function History() {
                   {/* Resume Downloads */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
-                    {app.cvDocUrl && (
-                      <a
-                        href={app.cvDocUrl}
-                        download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`}
-                        className="btn btn-secondary py-1 px-2 text-xs"
-                        title="Download Resume DOCX"
-                      >
-                        DOCX
-                      </a>
-                    )}
-                    {app.cvPdfUrl && (
-                      <a
-                        href={app.cvPdfUrl}
-                        download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`}
-                        className="btn btn-secondary py-1 px-2 text-xs"
-                        title="Download Resume PDF"
-                      >
-                        PDF
-                      </a>
-                    )}
+                    <a
+                      href={cvAPI.downloadDocUrl(app.id)}
+                      download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`}
+                      className="btn btn-secondary py-1 px-2 text-xs"
+                      title="Download Resume DOCX"
+                    >
+                      DOCX
+                    </a>
+                    <a
+                      href={cvAPI.downloadPdfUrl(app.id)}
+                      download={`${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`}
+                      className="btn btn-secondary py-1 px-2 text-xs"
+                      title="Download Resume PDF"
+                    >
+                      PDF
+                    </a>
                   </div>
                   
                   {/* Cover Letter Downloads */}
-                  {(app.coverLetterDocUrl || app.coverLetterPdfUrl) && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500 w-16">Cover:</span>
-                      {app.coverLetterDocUrl && (
-                        <a
-                          href={app.coverLetterDocUrl}
-                          download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`}
-                          className="btn btn-secondary py-1 px-2 text-xs"
-                          title="Download Cover Letter DOCX"
-                        >
-                          DOCX
-                        </a>
-                      )}
-                      {app.coverLetterPdfUrl && (
-                        <a
-                          href={app.coverLetterPdfUrl}
-                          download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`}
-                          className="btn btn-secondary py-1 px-2 text-xs"
-                          title="Download Cover Letter PDF"
-                        >
-                          PDF
-                        </a>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 w-16">Cover:</span>
+                    <a
+                      href={cvAPI.downloadCoverLetterDocUrl(app.id)}
+                      download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`}
+                      className="btn btn-secondary py-1 px-2 text-xs"
+                      title="Download Cover Letter DOCX"
+                    >
+                      DOCX
+                    </a>
+                    <a
+                      href={cvAPI.downloadCoverLetterPdfUrl(app.id)}
+                      download={`${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`}
+                      className="btn btn-secondary py-1 px-2 text-xs"
+                      title="Download Cover Letter PDF"
+                    >
+                      PDF
+                    </a>
+                  </div>
                   
                   {/* Delete Button */}
                   <button

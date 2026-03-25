@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const base = import.meta.env.VITE_API_URL || '';
-const API_BASE_URL = `${base.replace(/\/$/, '')}/api`;
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+export { API_BASE_URL };
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -94,7 +94,11 @@ export const cvAPI = {
   downloadDocUrl: (applicationId) => 
     `${API_BASE_URL}/cv/download/docx/${applicationId}`,
   downloadPdfUrl: (applicationId) => 
-    `${API_BASE_URL}/cv/download/pdf/${applicationId}`
+    `${API_BASE_URL}/cv/download/pdf/${applicationId}`,
+  downloadCoverLetterDocUrl: (applicationId) => 
+    `${API_BASE_URL}/cv/download/cover-letter/docx/${applicationId}`,
+  downloadCoverLetterPdfUrl: (applicationId) => 
+    `${API_BASE_URL}/cv/download/cover-letter/pdf/${applicationId}`
 };
 
 // Applications API
