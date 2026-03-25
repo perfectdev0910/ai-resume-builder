@@ -265,20 +265,17 @@ export default function History() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
 
-                    {app.cvDocUrl && (
-                      <button
-                        onClick={() =>
-                          handleDownload(
-                            app.cvDocUrl,
-                            `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`
-                          )
-                        }
-                        className="btn btn-secondary py-1 px-2 text-xs"
-                        title="Download Resume DOCX"
-                      >
-                        DOCX
-                      </button>
-                    )}
+                    <button
+                      onClick={() =>
+                        handleDownload(
+                          applicationsAPI.downloadDocUrl(app.id),
+                          `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`
+                        )
+                      }
+                      className="btn btn-secondary py-1 px-2 text-xs"
+                    >
+                      DOCX
+                    </button>
 
                     {app.cvPdfUrl && (
                       <button
