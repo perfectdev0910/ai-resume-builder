@@ -9,38 +9,50 @@ const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/
 
 
 // Download helper function that includes auth token
-const downloadFile = async (url, filename) => {
+const downloadFile = async (applicationId, type) => {
   try {
-    const idMatch = url.match(/\/(\d+)$/);
-    if (!idMatch) {
-      console.error('Download URL missing application ID:', url);
-      alert('Download not available. Please refresh the page.');
+    if (!applicationId) {
+      console.error('Missing application ID');
       return;
     }
+
+    let url;
+    if (type === 'docx') {
+      url = cvAPI.downloadDocUrl(applicationId);
+    } else if (type === 'pdf') {
+      url = cvAPI.downloadPdfUrl(applicationId);
+    }
+
+    console.log('FINAL URL:', url); // 🔥 critical debug
+
     const token = localStorage.getItem('authToken');
-    if (!token) {
-      alert('Please log in again to download files.');
-      return;
-    }
+
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
     });
-    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('Download failed:', text);
+      throw new Error(`Download failed`);
+    }
+
     const blob = await response.blob();
     const downloadUrl = window.URL.createObjectURL(blob);
+
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = filename;
+    a.download = `Resume.${type}`;
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(downloadUrl);
-    document.body.removeChild(a);
-  } catch (error) {
-    console.error('Download error:', error);
-    alert('Failed to download file. Please try again.');
+    a.remove();
+
+  } catch (err) {
+    console.error(err);
   }
 };
-
 export default function History() {
   const { user } = useAuth();
   const [applications, setApplications] = useState([]);
@@ -270,14 +282,14 @@ export default function History() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
                     <button
-                      onClick={() => downloadFile(cvAPI.downloadDocUrl(app.id), `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`)}
+                      onClick={() => downloadFile(app.id, 'docx')}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Resume DOCX"
                     >
                       DOCX
                     </button>
                     <button
-                      onClick={() => downloadFile(cvAPI.downloadPdfUrl(app.id), `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`)}
+                      onClick={() => downloadFile(app.id, 'pdf')}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Resume PDF"
                     >
@@ -289,14 +301,14 @@ export default function History() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Cover:</span>
                     <button
-                      onClick={() => downloadFile(cvAPI.downloadCoverLetterDocUrl(app.id), `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`)}
+                      onClick={() => downloadFile(app.id, 'docx')}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Cover Letter DOCX"
                     >
                       DOCX
                      </button>
                     <button
-                      onClick={() => downloadFile(cvAPI.downloadCoverLetterPdfUrl(app.id), `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`)}
+                      onClick={() => downloadFile(app.id, 'pdf')}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Cover Letter PDF"
                     >
