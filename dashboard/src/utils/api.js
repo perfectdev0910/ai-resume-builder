@@ -92,7 +92,6 @@ export const cvAPI = {
   preview: (jobDescription) => 
     api.post('/cv/preview', { jobDescription }),
   downloadDocUrl: (applicationId) => {
-    console.log('cvAPI.downloadDocUrl called with:', applicationId);
     if (!applicationId) {
       throw new Error('Application ID is required');
     }
