@@ -49,15 +49,14 @@ router.post('/generate', authMiddleware, async (req, res) => {
 
     // ✅ Fetch profile data
     const employmentHistory = await db.getAll(
-      process.env.DATABASE_URL
-        ? `SELECT * FROM employment_history WHERE user_id = $1 
-           ORDER BY 
-             CASE WHEN end_date IS NULL OR end_date = '' OR LOWER(end_date) = 'present' THEN 0 ELSE 1 END,
-             start_date DESC`
-        : `SELECT * FROM employment_history WHERE user_id = ? 
-           ORDER BY 
-             CASE WHEN end_date IS NULL OR end_date = "" OR LOWER(end_date) = "present" THEN 0 ELSE 1 END,
-             start_date DESC`,
+      `SELECT * FROM employment_history 
+      WHERE user_id = $1 
+      ORDER BY 
+        CASE 
+          WHEN end_date IS NULL OR LOWER(end_date) = 'present' THEN 0 
+          ELSE 1 
+        END,
+        TO_DATE(end_date, 'Mon YYYY') DESC`,
       [req.user.id]
     );
 
