@@ -11,31 +11,21 @@ const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/
 // Download helper function that includes auth token
 const downloadFile = async (url, filename) => {
   try {
-    // Validate URL
-    if (!url || url.includes('undefined') || url.includes(':path') || url.endsWith('/')) {
-      console.error('Invalid download URL:', url);
+    const idMatch = url.match(/\/(\d+)$/);
+    if (!idMatch) {
+      console.error('Download URL missing application ID:', url);
       alert('Download not available. Please refresh the page.');
       return;
     }
-    
     const token = localStorage.getItem('authToken');
     if (!token) {
       alert('Please log in again to download files.');
       return;
     }
-    
     const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers: { Authorization: `Bearer ${token}` },
     });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Download failed:', response.status, errorText);
-      throw new Error(`Download failed: ${response.status}`);
-    }
-    
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
     const blob = await response.blob();
     const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -280,14 +270,14 @@ export default function History() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
                     <button
-                      onClick={() => downloadFile(cvAPI.downloadDocUrl(app.id), `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`, app.id)}
+                      onClick={() => downloadFile(cvAPI.downloadDocUrl(app.id), `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.docx`)}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Resume DOCX"
                     >
                       DOCX
                     </button>
                     <button
-                      onClick={() => downloadFile(cvAPI.downloadPdfUrl(app.id), `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`, app.id)}
+                      onClick={() => downloadFile(cvAPI.downloadPdfUrl(app.id), `${sanitizeFilename(user?.full_name || 'Resume')}_Resume.pdf`)}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Resume PDF"
                     >
@@ -299,14 +289,14 @@ export default function History() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Cover:</span>
                     <button
-                      onClick={() => downloadFile(cvAPI.downloadCoverLetterDocUrl(app.id), `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`, app.id)}
+                      onClick={() => downloadFile(cvAPI.downloadCoverLetterDocUrl(app.id), `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.docx`)}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Cover Letter DOCX"
                     >
                       DOCX
                      </button>
                     <button
-                      onClick={() => downloadFile(cvAPI.downloadCoverLetterPdfUrl(app.id), `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`, app.id)}
+                      onClick={() => downloadFile(cvAPI.downloadCoverLetterPdfUrl(app.id), `${sanitizeFilename(user?.full_name || 'Cover_Letter')}_Cover_Letter.pdf`)}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Cover Letter PDF"
                     >
