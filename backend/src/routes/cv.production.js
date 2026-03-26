@@ -324,157 +324,78 @@ function validateApplicationId(applicationId) {
   return parseInt(applicationId);
 }
 
-// Download endpoints for cloud storage - redirect to cloud URLs
-router.get('/download/docx/:applicationId', authMiddleware, async (req, res) => {
-  try {
-     const applicationId = validateApplicationId(req.params.applicationId);
-    if (!applicationId) {
-      return res.status(400).json({ error: 'Invalid application ID' });
-    }
-    const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
-    const param2 = process.env.DATABASE_URL ? '$2' : '?';
-    
-    const application = await db.getOne(
-      `SELECT * FROM applications WHERE id = ${paramPlaceholder} AND user_id = ${param2}`,
-      [applicationId, req.user.id]
-    );
-
-    if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // For cloud storage, redirect to the cloud URL
-    if (storage) {
-      const url = application.cv_doc_url;
-      return res.redirect(url);
-    }
-
-    // For local storage, serve the file
-    const user = await db.getOne(
-      `SELECT full_name FROM users WHERE id = ${paramPlaceholder}`, 
-      [req.user.id]
-    );
-    const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Resume.docx`;
-    
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cv_doc_path}`);
-  } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ error: 'Failed to download file' });
-  }
-});
-
-router.get('/download/pdf/:applicationId', authMiddleware, async (req, res) => {
-  try {
-     const applicationId = validateApplicationId(req.params.applicationId);
-    if (!applicationId) {
-      return res.status(400).json({ error: 'Invalid application ID' });
-    }
-    
-    const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
-    const param2 = process.env.DATABASE_URL ? '$2' : '?';
-    
-    const application = await db.getOne(
-      `SELECT * FROM applications WHERE id = ${paramPlaceholder} AND user_id = ${param2}`,
-      [applicationId, req.user.id]
-    );
-
-    if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    if (storage) {
-      const url =application.cv_pdf_url;
-      return res.redirect(url);
-    }
-
-    const user = await db.getOne(
-      `SELECT full_name FROM users WHERE id = ${paramPlaceholder}`, 
-      [req.user.id]
-    );
-    const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Resume.pdf`;
-    
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cv_pdf_url}`);
-  } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ error: 'Failed to download file' });
-  }
-});
-
-router.get('/download/cover-letter/docx/:applicationId', authMiddleware, async (req, res) => {
+// 🔥 Generic handler to avoid duplication
+async function handleDownload(req, res, fileField, fallbackPathField, filenameSuffix) {
   try {
     const applicationId = validateApplicationId(req.params.applicationId);
+
     if (!applicationId) {
       return res.status(400).json({ error: 'Invalid application ID' });
     }
-    
-    const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
+
+    const param1 = process.env.DATABASE_URL ? '$1' : '?';
     const param2 = process.env.DATABASE_URL ? '$2' : '?';
-    
+
     const application = await db.getOne(
-      `SELECT * FROM applications WHERE id = ${paramPlaceholder} AND user_id = ${param2}`,
+      `SELECT * FROM applications WHERE id = ${param1} AND user_id = ${param2}`,
       [applicationId, req.user.id]
     );
 
-    if (!application || !application.cover_letter_doc_url) {
-      return res.status(404).json({ error: 'Cover letter not found' });
+    if (!application || !application[fileField]) {
+      return res.status(404).json({ error: 'File not found' });
     }
 
+    const fileUrl = application[fileField];
+
+    // ✅ CLOUD STORAGE → redirect to cloud URL
     if (storage) {
-      const url = application.cover_letter_doc_url;
-      return res.redirect(url);
+      return res.redirect(fileUrl);
     }
 
+    // ✅ LOCAL STORAGE → serve from /uploads
     const user = await db.getOne(
-      `SELECT full_name FROM users WHERE id = ${paramPlaceholder}`, 
+      `SELECT full_name FROM users WHERE id = ${param1}`,
       [req.user.id]
     );
-    const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Cover_Letter.docx`;
-    
+
+    const safeName = sanitizeDownloadFilename(user.full_name);
+    const extension = fileField.includes('pdf') ? 'pdf' : 'docx';
+
+    const downloadFilename = `${safeName}_${filenameSuffix}.${extension}`;
+
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+
+    // ✅ CRITICAL: always return a response
+    return res.redirect(`/uploads/${fileUrl}`);
+
   } catch (error) {
     console.error('Download error:', error);
-    res.status(500).json({ error: 'Failed to download file' });
+    return res.status(500).json({ error: 'Failed to download file' });
   }
-});
+}
 
-router.get('/download/cover-letter/pdf/:applicationId', authMiddleware, async (req, res) => {
-  try {
-    const applicationId = validateApplicationId(req.params.applicationId);
-    if (!applicationId) {
-      return res.status(400).json({ error: 'Invalid application ID' });
-    }
-    
-    const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
-    const param2 = process.env.DATABASE_URL ? '$2' : '?';
-    
-    const application = await db.getOne(
-      `SELECT * FROM applications WHERE id = ${paramPlaceholder} AND user_id = ${param2}`,
-      [applicationId, req.user.id]
-    );
+//
+// ✅ ROUTES
+//
 
-    if (!application || !application.cover_letter_pdf_url) {
-      return res.status(404).json({ error: 'Cover letter not found' });
-    }
+// Resume DOCX
+router.get('/download/docx/:applicationId', authMiddleware, (req, res) =>
+  handleDownload(req, res, 'cv_doc_url', 'cv_doc_path', 'Resume')
+);
 
-    if (storage) {
-      const url = application.cover_letter_pdf_url;
-      return res.redirect(url);
-    }
+// Resume PDF
+router.get('/download/pdf/:applicationId', authMiddleware, (req, res) =>
+  handleDownload(req, res, 'cv_pdf_url', 'cv_pdf_path', 'Resume')
+);
 
-    const user = await db.getOne(
-      `SELECT full_name FROM users WHERE id = ${paramPlaceholder}`, 
-      [req.user.id]
-    );
-    const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Cover_Letter.pdf`;
-    
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cover_letter_pdf_url}`);
-  } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ error: 'Failed to download file' });
-  }
-});
+// Cover Letter DOCX
+router.get('/download/cover-letter/docx/:applicationId', authMiddleware, (req, res) =>
+  handleDownload(req, res, 'cover_letter_doc_url', 'cover_letter_doc_path', 'Cover_Letter')
+);
+
+// Cover Letter PDF
+router.get('/download/cover-letter/pdf/:applicationId', authMiddleware, (req, res) =>
+  handleDownload(req, res, 'cover_letter_pdf_url', 'cover_letter_pdf_path', 'Cover_Letter')
+);
 
 module.exports = router;
