@@ -93,20 +93,28 @@ export const cvAPI = {
     api.post('/cv/preview', { jobDescription }),
   downloadDocUrl: (applicationId) => {
     console.log('cvAPI.downloadDocUrl called with:', applicationId);
-    const id = applicationId ?? 'MISSING_ID';
-    return `${API_BASE_URL}/cv/download/docx/${id}`;
+    if (!applicationId) {
+      throw new Error('Application ID is required');
+    }
+    return `${API_BASE_URL}/cv/download/docx/${applicationId}`;
   },
   downloadPdfUrl: (applicationId) => {
-    const id = applicationId ?? 'MISSING_ID';
-    return `${API_BASE_URL}/cv/download/pdf/${id}`;
+    if (!applicationId) {
+      throw new Error('Application ID is required');
+    }
+    return `${API_BASE_URL}/cv/download/pdf/${applicationId}`;
   },
   downloadCoverLetterDocUrl: (applicationId) => {
-    const id = applicationId ?? 'MISSING_ID';
-    return `${API_BASE_URL}/cv/download/cover-letter/docx/${id}`;
+    if (!applicationId) {
+      throw new Error('Application ID is required');
+    }
+    return `${API_BASE_URL}/cv/download/cover-letter/docx/${applicationId}`;
   },
   downloadCoverLetterPdfUrl: (applicationId) => {
-    const id = applicationId ?? 'MISSING_ID';
-    return `${API_BASE_URL}/cv/download/cover-letter/pdf/${id}`;
+    if (!applicationId) {
+      throw new Error('Application ID is required');
+    }
+    return `${API_BASE_URL}/cv/download/cover-letter/pdf/${applicationId}`;
   }
 };
 

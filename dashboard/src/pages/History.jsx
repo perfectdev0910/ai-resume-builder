@@ -9,7 +9,7 @@ const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/
 
 
 // Download helper function that includes auth token
-const downloadFile = async (applicationId, type) => {
+const downloadFile = async (applicationId, fileType, docType) => {
   try {
     if (!applicationId) {
       console.error('Missing application ID');
@@ -17,13 +17,18 @@ const downloadFile = async (applicationId, type) => {
     }
 
     let url;
-    if (type === 'docx') {
-      url = cvAPI.downloadDocUrl(applicationId);
-    } else if (type === 'pdf') {
-      url = cvAPI.downloadPdfUrl(applicationId);
+
+    if (docType === 'resume') {
+      url = fileType === 'docx'
+        ? cvAPI.downloadDocUrl(applicationId)
+        : cvAPI.downloadPdfUrl(applicationId);
+    } else if (docType === 'cover') {
+      url = fileType === 'docx'
+        ? cvAPI.downloadCoverLetterDocUrl(applicationId)
+        : cvAPI.downloadCoverLetterPdfUrl(applicationId);
     }
 
-    console.log('FINAL URL:', url); // 🔥 critical debug
+    console.log('FINAL URL:', url);
 
     const token = localStorage.getItem('authToken');
 
@@ -36,7 +41,7 @@ const downloadFile = async (applicationId, type) => {
     if (!response.ok) {
       const text = await response.text();
       console.error('Download failed:', text);
-      throw new Error(`Download failed`);
+      throw new Error('Download failed');
     }
 
     const blob = await response.blob();
@@ -44,7 +49,7 @@ const downloadFile = async (applicationId, type) => {
 
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = `Resume.${type}`;
+    a.download = `${docType}.${fileType}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -53,6 +58,7 @@ const downloadFile = async (applicationId, type) => {
     console.error(err);
   }
 };
+
 export default function History() {
   const { user } = useAuth();
   const [applications, setApplications] = useState([]);
@@ -282,14 +288,14 @@ export default function History() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Resume:</span>
                     <button
-                      onClick={() => downloadFile(app.id, 'docx')}
+                      onClick={() => downloadFile(app.id, 'docx', 'resume')}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Resume DOCX"
                     >
                       DOCX
                     </button>
                     <button
-                      onClick={() => downloadFile(app.id, 'pdf')}
+                      onClick={() => downloadFile(app.id, 'pdf', 'resume')}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Resume PDF"
                     >
@@ -301,14 +307,14 @@ export default function History() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-16">Cover:</span>
                     <button
-                      onClick={() => downloadFile(app.id, 'docx')}
+                      onClick={() => downloadFile(app.id, 'docx', 'cover')}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Cover Letter DOCX"
                     >
                       DOCX
                      </button>
                     <button
-                      onClick={() => downloadFile(app.id, 'pdf')}
+                      onClick={() => downloadFile(app.id, 'pdf', 'cover')}
                       className="btn btn-secondary py-1 px-2 text-xs"
                       title="Download Cover Letter PDF"
                     >
