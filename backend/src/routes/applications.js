@@ -247,18 +247,34 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const stats = await getAllCompat(
+      // SQLite (if you still need fallback)
       `SELECT
         COUNT(*) as total,
-        COUNT(CASE WHEN DATE(applied_at) = DATE('now') THEN 1 END) as today,
-        COUNT(CASE WHEN applied_at >= DATE('now', '-7 days') THEN 1 END) as thisWeek,
-        COUNT(CASE WHEN applied_at >= DATE('now', '-30 days') THEN 1 END) as thisMonth
-       FROM applications WHERE user_id = ?`,
+        COUNT(*) FILTER (WHERE DATE(applied_at) = DATE('now')) as today,
+        COUNT(*) FILTER (WHERE DATE(applied_at) >= DATE('now', '-7 days')) as thisWeek,
+        COUNT(*) FILTER (WHERE DATE(applied_at) >= DATE('now', '-30 days')) as thisMonth
+      FROM applications
+      WHERE user_id = ?`,
+
+      // PostgreSQL (Supabase ✅)
       `SELECT
         COUNT(*)::int as total,
-        COUNT(CASE WHEN DATE(applied_at) = CURRENT_DATE THEN 1 END)::int as today,
-        COUNT(CASE WHEN applied_at >= NOW() - INTERVAL '7 days' THEN 1 END)::int as thisWeek,
-        COUNT(CASE WHEN applied_at >= NOW() - INTERVAL '30 days' THEN 1 END)::int as thisMonth
-       FROM applications WHERE user_id = $1`,
+
+        COUNT(*) FILTER (
+          WHERE applied_at::date = CURRENT_DATE
+        )::int as today,
+
+        COUNT(*) FILTER (
+          WHERE applied_at::date >= CURRENT_DATE - INTERVAL '7 days'
+        )::int as thisWeek,
+
+        COUNT(*) FILTER (
+          WHERE applied_at::date >= CURRENT_DATE - INTERVAL '30 days'
+        )::int as thisMonth
+
+      FROM applications
+      WHERE user_id = $1`,
+
       [req.user.id]
     );
 
