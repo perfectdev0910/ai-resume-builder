@@ -130,7 +130,7 @@ export default function Generate() {
           <div className="bg-white rounded-lg p-6 max-w-md mx-4">
             <h3 className="text-lg font-semibold text-yellow-800 mb-2">⚠️ Duplicate Application</h3>
             <p className="text-gray-600 mb-4">
-              You have already applied to <strong>{companyName}</strong> in the last 2 weeks. Are you sure you want to proceed?
+              You have already applied to <strong>{companyName}</strong> in the last 30 days. Are you sure you want to proceed?
             </p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowDuplicateModal(false)} className="btn btn-secondary">

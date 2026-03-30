@@ -95,7 +95,7 @@ async function deleteFileIfExists(filename) {
   }
 }
 
-// Check for duplicate application (same company in last 2 weeks)
+// Check for duplicate application (same company in 30 days)
 router.get('/check-duplicate', authMiddleware, async (req, res) => {
   try {
     const { companyName } = req.query;
@@ -108,11 +108,11 @@ router.get('/check-duplicate', authMiddleware, async (req, res) => {
       `SELECT COUNT(*) as count FROM applications
        WHERE user_id = ?
        AND LOWER(company_name) = LOWER(?)
-       AND applied_at >= DATE('now', '-14 days')`,
+       AND applied_at >= DATE('now', '-30 days')`,
       `SELECT COUNT(*)::int as count FROM applications
        WHERE user_id = $1
        AND LOWER(company_name) = LOWER($2)
-       AND applied_at >= NOW() - INTERVAL '14 days'`,
+       AND applied_at >= NOW() - INTERVAL '30 days'`,
       [req.user.id, companyName]
     );
 
