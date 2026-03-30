@@ -171,7 +171,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-sm text-gray-500">This Week</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.stats?.thisWeek || 0}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.stats?.thisweek || 0}</p>
             </div>
           </div>
         </div>
@@ -185,7 +185,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-sm text-gray-500">This Month</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.stats?.thisMonth || 0}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.stats?.thismonth || 0}</p>
             </div>
           </div>
         </div>
