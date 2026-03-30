@@ -247,33 +247,56 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const stats = await getAllCompat(
-      // SQLite (if you still need fallback)
-      `SELECT
+      // ✅ SQLite (basic fallback — no timezone support)
+      `
+      SELECT
         COUNT(*) as total,
-        COUNT(*) FILTER (WHERE DATE(applied_at) = DATE('now')) as today,
-        COUNT(*) FILTER (WHERE DATE(applied_at) >= DATE('now', '-7 days')) as thisWeek,
-        COUNT(*) FILTER (WHERE DATE(applied_at) >= DATE('now', '-30 days')) as thisMonth
-      FROM applications
-      WHERE user_id = ?`,
 
-      // PostgreSQL (Supabase ✅)
-      `SELECT
+        COUNT(*) FILTER (
+          WHERE DATE(applied_at) = DATE('now')
+        ) as today,
+
+        -- Week: Monday → Sunday
+        COUNT(*) FILTER (
+          WHERE DATE(applied_at) >= DATE('now', 'weekday 1', '-7 days')
+            AND DATE(applied_at) < DATE('now', 'weekday 1')
+        ) as thisWeek,
+
+        -- Month: 1st → end
+        COUNT(*) FILTER (
+          WHERE DATE(applied_at) >= DATE('now', 'start of month')
+            AND DATE(applied_at) < DATE('now', 'start of month', '+1 month')
+        ) as thisMonth
+
+      FROM applications
+      WHERE user_id = ?
+      `,
+
+      // ✅ PostgreSQL (Supabase with timezone fix 🚀)
+      `
+      SELECT
         COUNT(*)::int as total,
 
+        -- Today (local time)
         COUNT(*) FILTER (
-          WHERE applied_at::date = CURRENT_DATE
+          WHERE (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')::date = CURRENT_DATE
         )::int as today,
 
+        -- Week: Monday → Sunday (local time)
         COUNT(*) FILTER (
-          WHERE applied_at::date >= CURRENT_DATE - INTERVAL '7 days'
+          WHERE (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') >= date_trunc('week', CURRENT_DATE)
+            AND (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week'
         )::int as thisWeek,
 
+        -- Month: 1st → end (local time)
         COUNT(*) FILTER (
-          WHERE applied_at::date >= CURRENT_DATE - INTERVAL '30 days'
+          WHERE (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') >= date_trunc('month', CURRENT_DATE)
+            AND (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
         )::int as thisMonth
 
       FROM applications
-      WHERE user_id = $1`,
+      WHERE user_id = $1
+      `,
 
       [req.user.id]
     );
