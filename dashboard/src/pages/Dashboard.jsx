@@ -51,6 +51,7 @@ export default function Dashboard() {
         applicationsAPI.getAll({ limit: 5 }),
         usersAPI.getProfile()
       ]);
+      console.log('STATS RESPONSE 👉', statsRes.data);
       setStats(statsRes.data);
       setRecentApplications(appsRes.data.applications);
       // Get user timezone from profile
