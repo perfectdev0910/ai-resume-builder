@@ -19,7 +19,7 @@ CRITICAL GUIDELINES:
 7. Generate skills based on the candidate's experience and the job requirements
 
 EXPERIENCE GUIDELINES:
-- For the FIRST and SECOND most recent positions: Write AT LEAST 10 detailed sentences/bullet points explaining responsibilities, achievements, and impact. Include specific metrics, technologies used, team leadership, project outcomes, and business impact. Each bullet point should be detailed and substantial.
+- For the FIRST and SECOND most recent positions: Write AT LEAST 10 detailed sentences/bullet points explaining responsibilities, achievements, and impact. Include technologies used, team leadership, project outcomes, and business impact. Each bullet point should be detailed and substantial.
 - For OTHER positions: Write 4-6 concise sentences/bullet points focusing on key achievements and relevant experience.
 
 SUMMARY GUIDELINES:
@@ -35,20 +35,7 @@ SUMMARY GUIDELINES:
 - Include relevant keywords from the job description naturally
 
 SKILLS GUIDELINES (VERY IMPORTANT):
-- Generate AT LEAST 40 relevant skills organized by category
-- Format skills EXACTLY like this example:
-  "Programming Languages: Java, Scala, Kotlin, JavaScript, TypeScript, SQL, Python, Bash, C#
-  Frameworks & Libraries: React, Angular, Vue.js, Next.js, Nuxt.js, Spring Boot, Hibernate, J2EE, Spring MVC, Spring Security, Spring Data JPA, Apache Kafka, RabbitMQ, JAX-RS, Play, Akka, Ktor, Micronaut, Express, NestJS, .NET
-  Cloud Technologies & Services: AWS (Lambda, EC2, S3, RDS, CloudFormation), Azure (App Services, Functions, CosmosDB), Google Cloud Platform (BigQuery, Firebase, Pub/Sub)
-  Architecture: Microservices, Event-Driven, Reactive, DDD, TDD, BDD, Clean Architecture, CQRS
-  AI & ML: OpenAI, TensorFlow, Recommendation Systems
-  Databases & Data Storage: SQL (MySQL, PostgreSQL, MSSQL), NoSQL (MongoDB, Redis, Cassandra), Data Warehousing (Redshift, BigQuery), Graph Databases (Neo4j)
-  DevOps & CI/CD: Docker, Kubernetes, Helm, Jenkins, GitLab CI/CD, GitHub Actions, Terraform, Ansible, AWS Elastic Beanstalk, Azure DevOps
-  Version Control & Collaboration: Git (GitHub, GitLab, Bitbucket), SVN, Agile/Scrum methodologies, JIRA, Confluence
-  Testing & Quality Assurance: Unit Testing (JUnit, TestNG, Mockito, PowerMock), Integration Testing (Selenium, Postman, RestAssured), TDD, Code Coverage (SonarQube, Jacoco)
-  Additional Skills: RESTful API Design, GraphQL, WebSockets, Web Performance Optimization, Cross-Browser Compatibility, CI/CD Pipeline Design, Security Best Practices (OAuth, JWT, HTTPS), Agile/Scrum Leadership"
-- Include skills based on candidate's experience AND job requirements
-- Organize into clear categories as shown above
+- Generate AT LEAST 100 relevant skills organized by category
 
 OUTPUT FORMAT (JSON):
 {
