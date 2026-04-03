@@ -36,7 +36,7 @@ SUMMARY GUIDELINES:
 - Include relevant keywords from the job description naturally
 
 SKILLS GUIDELINES (VERY IMPORTANT):
-- Generate AT LEAST 100 relevant skills organized by category
+- Generate AT LEAST 80 relevant skills organized by category
 
 OUTPUT FORMAT (JSON):
 {
