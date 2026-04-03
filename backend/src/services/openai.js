@@ -7,97 +7,106 @@ const openai = new OpenAI({
 async function generateCVContent(userProfile, jobDescription) {
   const { user, employmentHistory, education, certifications, additionalInfo } = userProfile;
 
-  const systemPrompt = `You are a professional resume/CV writer with expertise in creating ATS-friendly, compelling resumes. Your task is to generate a tailored resume based on the candidate's profile and the job description provided.
+  const systemPrompt = `You are a professional resume/CV writer with expertise in creating ATS-friendly, realistic, and compelling resumes.
 
 CRITICAL GUIDELINES:
-1. Tailor the resume to match the job requirements precisely
-2. Use strong action verbs and quantifiable achievements with metrics where possible
-3. Keep it professional and impactful
-4. Highlight the most relevant skills and experiences for this specific job
-5. Use keywords from the job description naturally throughout
-6. Do NOT fabricate information - only use and enhance what's provided
-7. Generate skills based on the candidate's experience and the job requirements
+1. Tailor the resume precisely to the job requirements
+2. Use a natural, human tone (avoid overly "AI-generated" phrasing)
+3. Do NOT overuse metrics or percentages
+4. Only use information provided - do NOT fabricate
+5. Integrate keywords from the job description naturally
+6. Vary sentence structure and avoid repetition
 
 EXPERIENCE GUIDELINES:
-- For the FIRST and SECOND most recent positions: Write AT LEAST 10 detailed sentences/bullet points explaining responsibilities, achievements, and impact. Include technologies used, team leadership, project outcomes, and business impact. Each bullet point should be detailed and substantial.
-- For OTHER positions: Write 4-6 concise sentences/bullet points focusing on key achievements and relevant experience.
+- MOST RECENT POSITION:
+  • Write AT LEAST 10 detailed bullet points
+  • ONLY 2–3 bullet points may include metrics (%, $, numbers)
+  • Remaining bullets must focus on responsibilities, architecture, impact, collaboration, and technologies
+
+- SECOND POSITION:
+  • Write AT LEAST 10 bullet points
+  • Avoid metrics (maximum 1–2 if truly meaningful)
+
+- OTHER POSITIONS:
+  • Write 4–6 concise bullet points
+  • No forced metrics
 
 SUMMARY GUIDELINES:
-- Write a compelling 7-8 sentence professional summary in FIRST PERSON (use "I" statements)
-- Do NOT mention the candidate's name in the summary
-- Start with years of experience and primary role focus (e.g., "I am a Software Engineer with 10+ years of experience...")
-- Include 2-3 key areas of expertise with specific technologies
-- Mention notable achievements with metrics where possible
-- Include relevant industry experience and domain knowledge
-- Highlight leadership experience or team collaboration
-- Mention any relevant certifications or specialized training
-- End with value proposition and career objectives
-- Include relevant keywords from the job description naturally
+- 7–8 sentences in FIRST PERSON ("I")
+- Do NOT mention name
+- Include:
+  • Years of experience
+  • Core expertise
+  • Technologies
+  • Leadership/collaboration
+  • Domain knowledge
+  • Certifications (if relevant)
+  • Career direction
 
 SKILLS GUIDELINES (VERY IMPORTANT):
-- Generate AT LEAST 90 relevant skills organized by category
+- Generate AT LEAST 100 skills
+- Each category must contain MANY skills (10–20+)
+- Avoid repetition
+- Include modern and relevant tools
 
-OUTPUT FORMAT (JSON):
+FORMAT EXACTLY:
+
+Programming Languages: ...
+Frameworks & Libraries: ...
+Cloud Technologies & Services: ...
+Architecture & Design Patterns: ...
+AI & ML: ...
+Databases & Data Storage: ...
+DevOps & CI/CD: ...
+Version Control & Collaboration: ...
+Testing & Quality Assurance: ...
+Security & Authentication: ...
+Additional Skills: ...
+
+OUTPUT FORMAT (JSON ONLY):
 {
-  "summary": "Detailed 7-8 sentence professional summary in FIRST PERSON (using 'I' statements, without mentioning name) tailored to the job with specific expertise, achievements, domain knowledge, and career objectives",
-  "skills": "Programming Languages: skill1, skill2, skill3...\\nFrameworks & Libraries: skill1, skill2...\\nCloud Technologies & Services: skill1, skill2...\\nArchitecture: skill1, skill2...\\nDatabases & Data Storage: skill1, skill2...\\nDevOps & CI/CD: skill1, skill2...\\nVersion Control & Collaboration: skill1, skill2...\\nTesting & Quality Assurance: skill1, skill2...\\nAdditional Skills: skill1, skill2...",
-  "experience": [
-    {
-      "position": "Job Title",
-      "company": "Company Name",
-      "location": "City, State",
-      "period": "Start - End",
-      "achievements": ["Detailed achievement with metrics and impact", ...]
-    }
-  ],
-  "education": [
-    {
-      "degree": "Degree Name",
-      "institution": "School Name",
-      "graduation": "Year",
-      "details": "Optional details like honors, relevant coursework"
-    }
-  ],
-  "certifications": ["Certification Name (Issuer, Date)"],
-  "additionalSections": [
-    {
-      "title": "Section Title",
-      "content": "Content"
-    }
-  ]
+  "summary": "...",
+  "skills": "...",
+  "experience": [],
+  "education": [],
+  "certifications": []
 }`;
 
-  const userPrompt = `Generate a tailored resume for the following candidate applying to this job:
+  const userPrompt = `Generate a tailored resume:
 
 ## CANDIDATE PROFILE
 
-**Name:** ${user.full_name}
-**Email:** ${user.email}
-**Phone:** ${user.phone_number || 'N/A'}
-**Location:** ${user.address || 'N/A'}
-**LinkedIn:** ${user.linkedin_profile || 'N/A'}
-**GitHub:** ${user.github_link || 'N/A'}
-**Years of Experience:** ${user.experience_years || 0}
+Name: ${user.full_name}
+Email: ${user.email}
+Phone: ${user.phone_number || 'N/A'}
+Location: ${user.address || 'N/A'}
+LinkedIn: ${user.linkedin_profile || 'N/A'}
+GitHub: ${user.github_link || 'N/A'}
+Years of Experience: ${user.experience_years || 0}
 
-### Employment History (Listed from most recent)
+### Employment History
 ${employmentHistory.map((job, index) => `
-${index + 1}. **${job.position}** at **${job.company}**
-   Location: ${job.location || 'N/A'}
-   Period: ${job.start_date || ''} - ${job.end_date || 'Present'}
-   Description: ${job.description || 'N/A'}
-   ${index < 2 ? '(IMPORTANT: Generate AT LEAST 10 detailed bullet points for this position - include metrics, technologies, leadership, project outcomes, and business impact)' : '(Generate 4-6 concise bullet points for this position)'}
+${index + 1}. ${job.position} at ${job.company}
+Location: ${job.location || 'N/A'}
+Period: ${job.start_date || ''} - ${job.end_date || 'Present'}
+Description: ${job.description || 'N/A'}
+
+${index === 0 
+  ? '(IMPORTANT: Only 2–3 bullet points should include metrics. Others should be natural and descriptive.)'
+  : index === 1 
+  ? '(Avoid metrics except 1–2 if truly impactful.)'
+  : '(No metrics required.)'
+}
 `).join('\n')}
 
 ### Education
 ${education.map(edu => `
-- **${edu.degree}** - ${edu.institution}
-  Location: ${edu.location || 'N/A'}
+- ${edu.degree} - ${edu.institution}
   Graduation: ${edu.graduation_date || 'N/A'}
-  ${edu.gpa ? `GPA: ${edu.gpa}` : ''}
 `).join('\n')}
 
 ### Certifications
-${certifications.map(cert => `- ${cert.name}${cert.issuer ? ` (${cert.issuer})` : ''}${cert.date_obtained ? ` - ${cert.date_obtained}` : ''}${cert.credly_link ? ` [Verified: ${cert.credly_link}]` : ''}`).join('\n')}
+${certifications.map(cert => `- ${cert.name}`).join('\n')}
 
 ### Additional Information
 ${additionalInfo.map(info => `- ${info.category}: ${info.content}`).join('\n')}
@@ -105,21 +114,16 @@ ${additionalInfo.map(info => `- ${info.category}: ${info.content}`).join('\n')}
 ---
 
 ## JOB DESCRIPTION
-
 ${jobDescription}
 
 ---
 
-Generate a professional, highly tailored resume in the JSON format specified. 
-
-CRITICAL REQUIREMENTS:
-1. SUMMARY: Must be 7-8 sentences in FIRST PERSON (use "I" statements) WITHOUT mentioning the candidate's name, covering experience, expertise, achievements, domain knowledge, leadership, certifications, and career objectives
-2. SKILLS: Must include AT LEAST 90 skills organized by category (Programming Languages, Frameworks & Libraries, Cloud Technologies, Architecture, Databases, DevOps, Version Control, Testing, Additional Skills, etc)
-3. EXPERIENCE (First 2 positions): Must have 3 detailed bullet points each with specific metrics, technologies, and business impact
-4. EXPERIENCE (other positions): Don't use specific metrics
-5. DO NOT include "additionalSections" - any extra content should be omitted
-
-Format skills EXACTLY like: "Programming Languages: Java, Python, JavaScript...\\nFrameworks & Libraries: React, Spring Boot...\\n..." etc.`;
+IMPORTANT:
+- Only 2–3 metrics in FIRST job
+- Keep tone natural and senior-level
+- Generate 100+ skills
+- Do NOT include additionalSections
+- Return VALID JSON ONLY`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -128,13 +132,12 @@ Format skills EXACTLY like: "Programming Languages: Java, Python, JavaScript...\
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.7,
+      temperature: 0.6,
       max_tokens: 4000,
       response_format: { type: 'json_object' }
     });
 
-    const content = response.choices[0].message.content;
-    return JSON.parse(content);
+    return JSON.parse(response.choices[0].message.content);
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw new Error('Failed to generate CV content');
@@ -144,52 +147,40 @@ Format skills EXACTLY like: "Programming Languages: Java, Python, JavaScript...\
 async function generateCoverLetter(userProfile, jobDescription, jobTitle, companyName) {
   const { user, employmentHistory, education, certifications } = userProfile;
 
-  const systemPrompt = `You are an expert cover letter writer. Write a compelling, professional cover letter that:
-1. Opens with enthusiasm and mentions the specific position and company
-2. Highlights 2-3 key qualifications that match the job requirements
-3. Provides specific examples of achievements from the candidate's background
-4. Shows knowledge of the company and why the candidate wants to work there
-5. Closes with a strong call to action
-6. Is personalized and NOT generic - avoid clichés
+  const systemPrompt = `You are an expert cover letter writer.
 
-The cover letter should be 3-4 paragraphs, approximately 250-350 words.
+Write a compelling, natural, non-generic cover letter:
+- 3–4 paragraphs (250–350 words)
+- Avoid clichés and generic phrases
+- Use real examples from experience
+- Keep tone professional but human
 
-OUTPUT FORMAT (JSON):
+OUTPUT (JSON):
 {
-  "salutation": "Dear Hiring Manager,",
-  "opening": "First paragraph - enthusiastic opening mentioning position and company",
-  "body": "Second paragraph - key qualifications and achievements with specific examples",
-  "companyFit": "Third paragraph - why this company and how you'll contribute",
-  "closing": "Final paragraph - strong closing with call to action",
-  "signoff": "Sincerely,",
-  "fullText": "Complete cover letter as one formatted text block"
+  "salutation": "",
+  "opening": "",
+  "body": "",
+  "companyFit": "",
+  "closing": "",
+  "signoff": "",
+  "fullText": ""
 }`;
 
-  const userPrompt = `Write a tailored cover letter for:
+  const userPrompt = `Candidate: ${user.full_name}
+Role: ${jobTitle}
+Company: ${companyName}
 
-**Candidate:** ${user.full_name}
-**Email:** ${user.email}
-**Phone:** ${user.phone_number || 'N/A'}
+Recent Experience:
+${employmentHistory.slice(0, 2).map(j => `- ${j.position} at ${j.company}`).join('\n')}
 
-**Applying for:** ${jobTitle || 'the position'}
-**Company:** ${companyName || 'your company'}
+Education:
+${education.slice(0, 1).map(e => `- ${e.degree}`).join('\n')}
 
-### Candidate's Background
-**Recent Experience:**
-${employmentHistory.slice(0, 2).map(job => `- ${job.position} at ${job.company} (${job.start_date || ''} - ${job.end_date || 'Present'})`).join('\n')}
+Certifications:
+${certifications.slice(0, 3).map(c => `- ${c.name}`).join('\n')}
 
-**Education:**
-${education.slice(0, 1).map(edu => `- ${edu.degree} from ${edu.institution}`).join('\n')}
-
-**Certifications:**
-${certifications.slice(0, 3).map(cert => `- ${cert.name}`).join('\n')}
-
-### Job Description
-${jobDescription}
-
----
-
-Write a compelling, personalized cover letter that connects the candidate's experience to this specific job. Make it genuine and avoid generic phrases.`;
+Job Description:
+${jobDescription}`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -198,13 +189,12 @@ Write a compelling, personalized cover letter that connects the candidate's expe
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.8,
+      temperature: 0.7,
       max_tokens: 1500,
       response_format: { type: 'json_object' }
     });
 
-    const content = response.choices[0].message.content;
-    return JSON.parse(content);
+    return JSON.parse(response.choices[0].message.content);
   } catch (error) {
     console.error('Cover letter generation error:', error);
     throw new Error('Failed to generate cover letter');
@@ -212,25 +202,31 @@ Write a compelling, personalized cover letter that connects the candidate's expe
 }
 
 async function extractJobDetails(jdContent) {
-  const systemPrompt = `Extract the job title and company name from the following job description. Return as JSON: {"jobTitle": "...", "companyName": "..."}. If not found, use "Not specified".`;
-
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: jdContent.substring(0, 2000) }
+        {
+          role: 'system',
+          content: 'Extract job title and company name. Return JSON: {"jobTitle":"","companyName":""}'
+        },
+        {
+          role: 'user',
+          content: jdContent.substring(0, 2000)
+        }
       ],
       temperature: 0,
-      max_tokens: 100,
       response_format: { type: 'json_object' }
     });
 
     return JSON.parse(response.choices[0].message.content);
   } catch (error) {
-    console.error('Job details extraction error:', error);
     return { jobTitle: 'Not specified', companyName: 'Not specified' };
   }
 }
 
-module.exports = { generateCVContent, generateCoverLetter, extractJobDetails };
+module.exports = {
+  generateCVContent,
+  generateCoverLetter,
+  extractJobDetails
+};
