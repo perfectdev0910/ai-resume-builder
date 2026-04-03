@@ -37,6 +37,7 @@ SUMMARY GUIDELINES:
 
 SKILLS GUIDELINES (VERY IMPORTANT):
 - Generate AT LEAST 80 relevant skills organized by category
+- Mention more than 9 skills in each category
 
 OUTPUT FORMAT (JSON):
 {
