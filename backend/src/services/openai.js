@@ -21,7 +21,6 @@ CRITICAL GUIDELINES:
 EXPERIENCE GUIDELINES:
 - For the FIRST and SECOND most recent positions: Write AT LEAST 10 detailed sentences/bullet points explaining responsibilities, achievements, and impact. Include technologies used, team leadership, project outcomes, and business impact. Each bullet point should be detailed and substantial.
 - For OTHER positions: Write 4-6 concise sentences/bullet points focusing on key achievements and relevant experience.
-- Don't mention too much key metrics of achievements and use possible random number when mention metrics.
 
 SUMMARY GUIDELINES:
 - Write a compelling 7-8 sentence professional summary in FIRST PERSON (use "I" statements)
@@ -36,8 +35,7 @@ SUMMARY GUIDELINES:
 - Include relevant keywords from the job description naturally
 
 SKILLS GUIDELINES (VERY IMPORTANT):
-- Generate AT LEAST 80 relevant skills organized by category
-- Mention more than 9 skills in each category
+- Generate AT LEAST 90 relevant skills organized by category
 
 OUTPUT FORMAT (JSON):
 {
@@ -116,10 +114,9 @@ Generate a professional, highly tailored resume in the JSON format specified.
 
 CRITICAL REQUIREMENTS:
 1. SUMMARY: Must be 7-8 sentences in FIRST PERSON (use "I" statements) WITHOUT mentioning the candidate's name, covering experience, expertise, achievements, domain knowledge, leadership, certifications, and career objectives
-2. SKILLS: Must include AT LEAST 40 skills organized by category (Programming Languages, Frameworks & Libraries, Cloud Technologies, Architecture, Databases, DevOps, Version Control, Testing, Additional Skills)
-3. EXPERIENCE (First 2 positions): Must have AT LEAST 10 detailed bullet points each with specific metrics, technologies, and business impact
-4. EXPERIENCE (Other positions): Must have 4-6 bullet points each
-5. DO NOT include "additionalSections" - any extra content should be omitted
+2. SKILLS: Must include AT LEAST 90 skills organized by category (Programming Languages, Frameworks & Libraries, Cloud Technologies, Architecture, Databases, DevOps, Version Control, Testing, Additional Skills, etc)
+3. EXPERIENCE (First 2 positions): Must have AT LEAST 5 detailed bullet points each with specific metrics, technologies, and business impact
+4. DO NOT include "additionalSections" - any extra content should be omitted
 
 Format skills EXACTLY like: "Programming Languages: Java, Python, JavaScript...\\nFrameworks & Libraries: React, Spring Boot...\\n..." etc.`;
 
