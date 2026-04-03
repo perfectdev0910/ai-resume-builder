@@ -21,7 +21,7 @@ CRITICAL GUIDELINES:
 EXPERIENCE GUIDELINES:
 - For the FIRST and SECOND most recent positions: Write AT LEAST 10 detailed sentences/bullet points explaining responsibilities, achievements, and impact. Include technologies used, team leadership, project outcomes, and business impact. Each bullet point should be detailed and substantial.
 - For OTHER positions: Write 4-6 concise sentences/bullet points focusing on key achievements and relevant experience.
-- Don't mention too much key metrics of achievements
+- Don't mention too much key metrics of achievements and use possible random number when mention metrics.
 
 SUMMARY GUIDELINES:
 - Write a compelling 7-8 sentence professional summary in FIRST PERSON (use "I" statements)
