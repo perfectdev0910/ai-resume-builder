@@ -115,8 +115,9 @@ Generate a professional, highly tailored resume in the JSON format specified.
 CRITICAL REQUIREMENTS:
 1. SUMMARY: Must be 7-8 sentences in FIRST PERSON (use "I" statements) WITHOUT mentioning the candidate's name, covering experience, expertise, achievements, domain knowledge, leadership, certifications, and career objectives
 2. SKILLS: Must include AT LEAST 90 skills organized by category (Programming Languages, Frameworks & Libraries, Cloud Technologies, Architecture, Databases, DevOps, Version Control, Testing, Additional Skills, etc)
-3. EXPERIENCE (First 2 positions): Must have AT LEAST 5 detailed bullet points each with specific metrics, technologies, and business impact
-4. DO NOT include "additionalSections" - any extra content should be omitted
+3. EXPERIENCE (First 2 positions): Must have 3 detailed bullet points each with specific metrics, technologies, and business impact
+4. EXPERIENCE (other positions): Don't use specific metrics
+5. DO NOT include "additionalSections" - any extra content should be omitted
 
 Format skills EXACTLY like: "Programming Languages: Java, Python, JavaScript...\\nFrameworks & Libraries: React, Spring Boot...\\n..." etc.`;
 
