@@ -149,7 +149,7 @@ async function generateDocx(cvContent, userInfo, customFilename = null, options 
 if (job.summary) {
   sections.push(
     new Paragraph({
-      children: [new TextRun({ text: job.summary, italics: true, size: 20 })],
+      children: [new TextRun({ text: job.summary, italics: true, size: 9 })],
       spacing: { after: 80 }
     })
   );
@@ -159,7 +159,7 @@ if (job.summary) {
 if (job.responsibilities && job.responsibilities.length > 0) {
   sections.push(
     new Paragraph({
-      children: [new TextRun({ text: 'Responsibilities:', bold: true, size: 20 })],
+      children: [new TextRun({ text: 'Responsibilities:', bold: true, size: 9 })],
       spacing: { after: 50 }
     })
   );
@@ -167,7 +167,7 @@ if (job.responsibilities && job.responsibilities.length > 0) {
   for (const item of job.responsibilities) {
     sections.push(
       new Paragraph({
-        children: [new TextRun({ text: `• ${item}`, size: 22 })],
+        children: [new TextRun({ text: `• ${item}`, size: 9 })],
         indent: { left: 360 }
       })
     );
@@ -178,7 +178,7 @@ if (job.responsibilities && job.responsibilities.length > 0) {
       if (job.keyAchievements && job.keyAchievements.length > 0) {
         sections.push(
           new Paragraph({
-            children: [new TextRun({ text: 'Key Achievements:', bold: true, size: 20 })],
+            children: [new TextRun({ text: 'Key Achievements:', bold: true, size: 9 })],
             spacing: { before: 80, after: 50 }
           })
         );
@@ -186,7 +186,7 @@ if (job.responsibilities && job.responsibilities.length > 0) {
         for (const achievement of job.keyAchievements) {
           sections.push(
             new Paragraph({
-              children: [new TextRun({ text: `• ${achievement}`, size: 22 })],
+              children: [new TextRun({ text: `• ${achievement}`, size: 9 })],
               indent: { left: 360 }
             })
           );
