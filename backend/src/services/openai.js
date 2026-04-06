@@ -23,18 +23,42 @@ All other bullet points should focus on responsibilities, impact, technologies, 
 9. Vary sentence tone and phring across bullet points.
 10. Write like an experienced senior engineer, not a marketing document.
 
-EXPERIENCE GUIDELINES:
-For the MOST RECENT position:
-- Write AT LEAST 10 bullet points
-- ONLY 2–3 bullet points should include metrics (%, $, numbers)
-- The remaining bullet points should describe responsibilities, technical contributions, system design, collaboration, and impact in a natural way
+EXPERIENCE STRUCTURE RULES:
 
-For the SECOND position:
-- Write AT LEAST 10 bullet points
-- Avoid metrics unless truly necessary (max 1–2)
+For EACH position, generate THREE sections:
 
-For OTHER positions:
-- Write 4–6 concise bullet points with no forced metrics
+1. SUMMARY:
+   - Exactly 1 sentence
+   - Describe overall role, scope, and impact
+
+2. RESPONSIBILITIES:
+   - Focus on day-to-day work, systems, technologies, collaboration
+   - Use bullet points
+   - No forced metrics
+
+3. KEY ACHIEVEMENTS:
+   - Focus on impact, outcomes, improvements
+   - Metrics allowed ONLY:
+     - MOST RECENT role → 2–3 achievements with metrics
+     - SECOND role → max 1–2 metrics
+     - Other roles → avoid metrics
+
+ROLE LENGTH REQUIREMENTS:
+
+- MOST RECENT ROLE:
+  - 1 summary
+  - 6–8 responsibilities
+  - 4–6 key achievements
+
+- SECOND ROLE:
+  - 1 summary
+  - 6–8 responsibilities
+  - 4–6 key achievements
+
+- OTHER ROLES:
+  - 1 summary
+  - 3–5 responsibilities
+  - 2–3 key achievements
 
 EXPERIENCE ALIGNMENT RULES (CRITICAL):
 
@@ -81,54 +105,57 @@ SUMMARY GUIDELINES:
 - End with value proposition and career objectives
 - Include relevant keywords from the job description naturally
 
-SKILLS GUIDELINES (CRITICAL - DYNAMIC CATEGORIES):
+SKILLS GUIDELINES (STRICT - FIXED STRUCTURE):
 
-1. FIRST: Extract ALL skills, tools, technologies, frameworks, and keywords explicitly mentioned in the JOB DESCRIPTION.
+1. Extract ALL skills, tools, technologies, frameworks, and keywords explicitly mentioned in the JOB DESCRIPTION.
    - Do NOT miss any skill
    - Keep original wording (no paraphrasing)
-   - Include even minor tools and methodologies
 
-2. SECOND: Generate SKILL CATEGORIES dynamically based on the JOB DESCRIPTION.
-   - Categories MUST reflect how the role is structured in the JD
-   - Examples (do NOT hardcode): Backend, Frontend, Data Engineering, Cloud Infrastructure, AI/ML, DevOps, Security, Mobile, etc.
-   - Use only relevant categories — no generic or empty ones
+2. Create EXACTLY 10 SKILL CATEGORIES.
+   - Categories MUST be relevant to the job description
+   - Do NOT create more or fewer than 10 categories
+   - Examples: Backend, Frontend, Data Engineering, Cloud, DevOps, Testing, Security, Architecture, Tools, Soft Skills (adjust based on JD)
 
-3. THIRD: Assign ALL extracted JD skills into the most appropriate categories
-   - Every JD skill MUST appear exactly once
-   - Do NOT drop or duplicate any skill
+3. Each category MUST contain AT LEAST 8 relevant skills.
+   - Prefer 10–20 skills per category when possible
 
-4. FOURTH: Add additional relevant skills from the candidate’s experience
-   - Only if they strengthen the application
-   - Place them in appropriate categories
+4. ALL JD skills MUST appear in the skills section.
+   - Each skill must appear ONLY ONCE (no duplicates)
 
-5. STRICT REQUIREMENTS:
-   - ALL JD skills MUST be included
-   - Total skills MUST exceed 100
-   - Each category should contain MANY skills (10–25+ where applicable)
-   - Avoid duplicates
-   - Do NOT invent irrelevant skills
+5. Add additional relevant skills from the candidate’s experience to meet the category size requirement.
 
-6. ORDERING:
-   - Within each category: JD skills FIRST, then candidate skills
+6. Maintain logical grouping (do not randomly distribute skills).
 
 7. OUTPUT FORMAT (STRICT STRING FORMAT):
 Category Name 1: skill1, skill2, skill3...
 Category Name 2: skill1, skill2, skill3...
-Category Name 3: skill1, skill2, skill3...
+...
+Category Name 10: skill1, skill2, skill3...
+
 
 OUTPUT FORMAT (JSON):
 {
   "summary": "Detailed 7-8 sentence professional summary in FIRST PERSON (using 'I' statements, without mentioning name) tailored to the job with specific expertise, achievements, domain knowledge, and career objectives",
   "skills": "Category Name 1: skill1, skill2, skill3...\\nCategory Name 2: skill1, skill2, skill3...\\nCategory Name 3: skill1, skill2, skill3...\\n...",
   "experience": [
-    {
-      "position": "Job Title",
-      "company": "Company Name",
-      "location": "City, State",
-      "period": "Start - End",
-      "achievements": ["Detailed achievement with metrics and impact", ...]
-    }
-  ],
+  {
+    "position": "Job Title",
+    "company": "Company Name",
+    "location": "City, State",
+    "period": "Start - End",
+    "summary": "One concise sentence explaining overall role and impact.",
+    "responsibilities": [
+      "Responsibility 1",
+      "Responsibility 2",
+      "Responsibility 3"
+    ],
+    "keyAchievements": [
+      "Achievement 1 (include metrics ONLY where allowed)",
+      "Achievement 2",
+      "Achievement 3"
+    ]
+  }
+],
   "education": [
     {
       "degree": "Degree Name",
@@ -200,6 +227,15 @@ CRITICAL REQUIREMENTS:
 3. EXPERIENCE (First 2 positions): Must have AT LEAST 10 detailed bullet points each with specific metrics, technologies, and business impact
 4. EXPERIENCE (Other positions): Must have 4-6 bullet points each
 5. DO NOT include "additionalSections" - any extra content should be omitted
+6. EXPERIENCE FORMAT:
+- Each role MUST include: summary, responsibilities, keyAchievements
+- Do NOT merge responsibilities and achievements
+- Keep them clearly separated
+
+7. SKILLS:
+- MUST contain EXACTLY 10 categories
+- EACH category must have AT LEAST 8 skills
+- ALL JD skills MUST be included
 
 Format skills EXACTLY like: "Category Name 1: skill1, skill2, skill3...\\nCategory Name 2: skill1, skill2, skill3...\\n..." etc.
 IMPORTANT (EXPERIENCE ALIGNMENT):
