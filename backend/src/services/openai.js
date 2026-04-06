@@ -50,6 +50,39 @@ SUMMARY GUIDELINES:
 
 SKILLS GUIDELINES (VERY IMPORTANT):
 - Generate AT LEAST 100 relevant skills across all categories.
+1. FIRST: Extract ALL skills, tools, technologies, frameworks, and keywords explicitly mentioned in the JOB DESCRIPTION.
+   - Do NOT miss any skill from the JD
+   - Do NOT paraphrase or generalize (keep original terms)
+   - Include even minor tools if mentioned
+
+2. SECOND: Add relevant skills from the candidate's experience ONLY if they complement the JD.
+
+3. THIRD: Organize skills into categories BASED ON the job description.
+   - Categories should reflect how skills are grouped in the JD
+   - You may adapt or create categories dynamically (e.g., Backend, Frontend, Cloud, Data, AI/ML, DevOps, etc.)
+
+4. STRICT REQUIREMENTS:
+   - ALL JD skills MUST be included
+   - Total skills MUST exceed 100
+   - Each category should contain MANY skills (10–25+)
+   - Avoid duplicates
+   - Do NOT invent irrelevant skills
+
+5. PRIORITIZATION:
+   - JD skills come FIRST in each category
+   - Candidate skills come AFTER
+
+6. OUTPUT FORMAT (STRICT):
+Programming Languages: skill1, skill2, skill3...
+Frameworks & Libraries: skill1, skill2...
+Cloud & Infrastructure: skill1, skill2...
+Architecture & Design Patterns: skill1, skill2...
+Databases & Storage: skill1, skill2...
+DevOps & CI/CD: skill1, skill2...
+Testing & Quality Assurance: skill1, skill2...
+Security & Authentication: skill1, skill2...
+Tools & Platforms: skill1, skill2...
+Additional Skills: skill1, skill2...
 
 SKILLS REQUIREMENTS:
 - Each category must contain MANY skills (10–20+ each)
@@ -100,7 +133,10 @@ OUTPUT FORMAT (JSON):
       "content": "Content"
     }
   ]
-}`;
+}
+IMPORTANT: Before generating the final output, internally extract and list all skills from the job description and ensure 100% of them appear in the skills section.  
+`
+;
 
   const userPrompt = `Generate a tailored resume for the following candidate applying to this job:
 
