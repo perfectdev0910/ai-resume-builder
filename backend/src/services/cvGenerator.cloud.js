@@ -401,7 +401,7 @@ async function generatePdf(cvContent, userInfo, customFilename = null, options =
 
       // Responsibilities
       if (job.responsibilities) {
-        drawText('Responsibilities:', { bold: flase, size: 12 });
+        drawText('Responsibilities:', { size: 12 });
         for (const item of job.responsibilities) {
           drawText(`• ${item}`, { x: margin + 10 });
         }
@@ -409,7 +409,7 @@ async function generatePdf(cvContent, userInfo, customFilename = null, options =
 
       // Achievements
       if (job.keyAchievements) {
-        drawText('Key Achievements:', { bold: false, size: 12 });
+        drawText('Key Achievements:', { size: 12 });
         for (const ach of job.keyAchievements) {
           drawText(`• ${ach}`, { x: margin + 10 });
         }
