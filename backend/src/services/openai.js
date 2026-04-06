@@ -36,6 +36,39 @@ For the SECOND position:
 For OTHER positions:
 - Write 4–6 concise bullet points with no forced metrics
 
+EXPERIENCE ALIGNMENT RULES (CRITICAL):
+
+1. ALIGN WITH JOB DESCRIPTION:
+   - Each bullet point MUST reflect responsibilities and requirements from the JOB DESCRIPTION
+   - Reframe the candidate’s past experience to closely match the target role
+   - Use similar terminology, tools, and patterns from the JD
+
+2. INCORPORATE JD SKILLS:
+   - Use skills and technologies from the JOB DESCRIPTION within bullet points
+   - Ensure JD keywords appear naturally across the experience section
+   - Prioritize high-impact and frequently mentioned JD skills
+
+3. ADAPT TO TARGET JOB TITLE:
+   - Interpret the TARGET JOB TITLE from the job description
+   - Adjust tone and responsibilities to match expectations of that role
+     Example:
+     - Backend role → APIs, microservices, scalability, databases
+     - Frontend role → UI/UX, performance, accessibility
+     - Data role → pipelines, ETL, analytics, ML
+     - DevOps → CI/CD, infrastructure, automation
+
+4. DO NOT FABRICATE:
+   - Do NOT introduce completely new experiences or technologies not implied by the candidate’s background
+   - You MAY generalize or reframe existing experience to better match the JD
+
+5. PRIORITIZATION:
+   - Most recent roles should have the STRONGEST alignment with the JD
+   - Older roles can be less aligned but still relevant
+
+6. NATURAL INTEGRATION:
+   - Do NOT keyword-stuff
+   - Blend JD skills into real-world responsibilities naturally
+
 SUMMARY GUIDELINES:
 - Write a compelling 7-8 sentence professional summary in FIRST PERSON (use "I" statements)
 - Do NOT mention the candidate's name in the summary
@@ -168,7 +201,13 @@ CRITICAL REQUIREMENTS:
 4. EXPERIENCE (Other positions): Must have 4-6 bullet points each
 5. DO NOT include "additionalSections" - any extra content should be omitted
 
-Format skills EXACTLY like: "Category Name 1: skill1, skill2, skill3...\\nCategory Name 2: skill1, skill2, skill3...\\n..." etc.`;
+Format skills EXACTLY like: "Category Name 1: skill1, skill2, skill3...\\nCategory Name 2: skill1, skill2, skill3...\\n..." etc.
+IMPORTANT (EXPERIENCE ALIGNMENT):
+- Experience MUST be rewritten to closely match the job description
+- Use terminology and skills from the JD throughout bullet points
+- Adapt responsibilities to match the target job title
+- Do NOT copy JD text directly — rewrite naturally based on candidate experience`
+;
 
   try {
     const response = await openai.chat.completions.create({
