@@ -48,67 +48,45 @@ SUMMARY GUIDELINES:
 - End with value proposition and career objectives
 - Include relevant keywords from the job description naturally
 
-SKILLS GUIDELINES (VERY IMPORTANT):
-- Generate AT LEAST 100 relevant skills across all categories.
+SKILLS GUIDELINES (CRITICAL - DYNAMIC CATEGORIES):
+
 1. FIRST: Extract ALL skills, tools, technologies, frameworks, and keywords explicitly mentioned in the JOB DESCRIPTION.
-   - Do NOT miss any skill from the JD
-   - Do NOT paraphrase or generalize (keep original terms)
-   - Include even minor tools if mentioned
+   - Do NOT miss any skill
+   - Keep original wording (no paraphrasing)
+   - Include even minor tools and methodologies
 
-2. SECOND: Add relevant skills from the candidate's experience ONLY if they complement the JD.
+2. SECOND: Generate SKILL CATEGORIES dynamically based on the JOB DESCRIPTION.
+   - Categories MUST reflect how the role is structured in the JD
+   - Examples (do NOT hardcode): Backend, Frontend, Data Engineering, Cloud Infrastructure, AI/ML, DevOps, Security, Mobile, etc.
+   - Use only relevant categories — no generic or empty ones
 
-3. THIRD: Organize skills into categories BASED ON the job description.
-   - Categories should reflect how skills are grouped in the JD
-   - You may adapt or create categories dynamically (e.g., Backend, Frontend, Cloud, Data, AI/ML, DevOps, etc.)
+3. THIRD: Assign ALL extracted JD skills into the most appropriate categories
+   - Every JD skill MUST appear exactly once
+   - Do NOT drop or duplicate any skill
 
-4. STRICT REQUIREMENTS:
+4. FOURTH: Add additional relevant skills from the candidate’s experience
+   - Only if they strengthen the application
+   - Place them in appropriate categories
+
+5. STRICT REQUIREMENTS:
    - ALL JD skills MUST be included
    - Total skills MUST exceed 100
-   - Each category should contain MANY skills (10–25+)
+   - Each category should contain MANY skills (10–25+ where applicable)
    - Avoid duplicates
    - Do NOT invent irrelevant skills
 
-5. PRIORITIZATION:
-   - JD skills come FIRST in each category
-   - Candidate skills come AFTER
+6. ORDERING:
+   - Within each category: JD skills FIRST, then candidate skills
 
-6. OUTPUT FORMAT (STRICT):
-Programming Languages: skill1, skill2, skill3...
-Frameworks & Libraries: skill1, skill2...
-Cloud & Infrastructure: skill1, skill2...
-Architecture & Design Patterns: skill1, skill2...
-Databases & Storage: skill1, skill2...
-DevOps & CI/CD: skill1, skill2...
-Testing & Quality Assurance: skill1, skill2...
-Security & Authentication: skill1, skill2...
-Tools & Platforms: skill1, skill2...
-Additional Skills: skill1, skill2...
-
-SKILLS REQUIREMENTS:
-- Each category must contain MANY skills (10–20+ each)
-- Ensure total skills count exceeds 100
-- Avoid repetition
-- Include both core and advanced tools/technologies
-- Include modern industry tools based on job description
-- Format skills EXACTLY like this example:
-  "Programming Languages: (15+ skills)
-Frameworks & Libraries: (15+ skills)
-Cloud Technologies & Services: (15+ skills)
-Architecture & Design Patterns: (10+ skills)
-AI & ML (if relevant): (5–10 skills)
-Databases & Data Storage: (10+ skills)
-DevOps & CI/CD: (10+ skills)
-Version Control & Collaboration: (5–10 skills)
-Testing & Quality Assurance: (10+ skills)
-Security & Authentication: (5–10 skills)
-Additional Skills: (10–15 skills)"
-- Include skills based on candidate's experience AND job requirements
-- Organize into clear categories as shown above
+7. OUTPUT FORMAT (STRICT STRING FORMAT):
+Category Name 1: skill1, skill2, skill3...
+Category Name 2: skill1, skill2, skill3...
+Category Name 3: skill1, skill2, skill3...
 
 OUTPUT FORMAT (JSON):
 {
   "summary": "Detailed 7-8 sentence professional summary in FIRST PERSON (using 'I' statements, without mentioning name) tailored to the job with specific expertise, achievements, domain knowledge, and career objectives",
-  "skills": "Programming Languages: skill1, skill2, skill3...\\nFrameworks & Libraries: skill1, skill2...\\nCloud Technologies & Services: skill1, skill2...\\nArchitecture: skill1, skill2...\\nDatabases & Data Storage: skill1, skill2...\\nDevOps & CI/CD: skill1, skill2...\\nVersion Control & Collaboration: skill1, skill2...\\nTesting & Quality Assurance: skill1, skill2...\\nAdditional Skills: skill1, skill2...",
+  "skills": "Category Name 1: skill1, skill2, skill3...\\nCategory Name 2: skill1, skill2, skill3...\\nCategory Name 3: skill1, skill2, skill3...\\n...",
   "experience": [
     {
       "position": "Job Title",
@@ -185,12 +163,12 @@ Generate a professional, highly tailored resume in the JSON format specified.
 
 CRITICAL REQUIREMENTS:
 1. SUMMARY: Must be 7-8 sentences in FIRST PERSON (use "I" statements) WITHOUT mentioning the candidate's name, covering experience, expertise, achievements, domain knowledge, leadership, certifications, and career objectives
-2. SKILLS: Must include AT LEAST 40 skills organized by category (Programming Languages, Frameworks & Libraries, Cloud Technologies, Architecture, Databases, DevOps, Version Control, Testing, Additional Skills)
+2. SKILLS: Must include AT LEAST 100 skills organized by category 
 3. EXPERIENCE (First 2 positions): Must have AT LEAST 10 detailed bullet points each with specific metrics, technologies, and business impact
 4. EXPERIENCE (Other positions): Must have 4-6 bullet points each
 5. DO NOT include "additionalSections" - any extra content should be omitted
 
-Format skills EXACTLY like: "Programming Languages: Java, Python, JavaScript...\\nFrameworks & Libraries: React, Spring Boot...\\n..." etc.`;
+Format skills EXACTLY like: "Category Name 1: skill1, skill2, skill3...\\nCategory Name 2: skill1, skill2, skill3...\\n..." etc.`;
 
   try {
     const response = await openai.chat.completions.create({
