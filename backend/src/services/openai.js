@@ -21,17 +21,17 @@ CRITICAL GUIDELINES:
 
 MOST RECENT ROLE:
 - Summary: 1 sentence describing role and impact
-- Responsibilities: 6–8 bullets. Each bullet should be a full sentence describing complex tasks, system design, technologies, collaboration, and measurable impact where appropriate. Avoid single-line fragments.
-- KeyAchievements: 4–6 bullets. Include detailed outcomes and improvements. Only 2–3 bullets may include metrics.
+- Responsibilities: 8-10 bullets. Each bullet should be a full sentence describing complex tasks, system design, technologies, collaboration, and measurable impact where appropriate. Avoid single-line fragments.
+- KeyAchievements: 4–6 bullets. Include detailed outcomes and improvements. Only 2–3 bullets may include metrics. 
 
 SECOND ROLE:
 - Summary: 1 sentence
-- Responsibilities: 6–8 bullets, detailed and descriptive
+- Responsibilities: 8–10 bullets, detailed and descriptive as above
 - KeyAchievements: 4–6 bullets, max 1–2 with metrics
 
 OTHER ROLES:
 - Summary: 1 sentence
-- Responsibilities: 3–5 bullets, descriptive
+- Responsibilities: 3–5 bullets, descriptive as above
 - KeyAchievements: 2–3 bullets
 
 Skills Section:
@@ -97,13 +97,13 @@ ${index + 1}. **${job.position}** at **${job.company}**
    (MOST RECENT ROLE REQUIREMENTS:
    - Generate:
      • 1 strong summary (1 sentence)
-     • 6–8 responsibilities (NO metrics, focus on systems, architecture, JD alignment)
+     • 8–10 responsibilities (NO metrics, focus on systems, architecture, JD alignment)
      • 4–6 key achievements (ONLY 2–3 with metrics)
    )` : index === 1 ? `
    (SECOND ROLE REQUIREMENTS:
    - Generate:
      • 1 summary
-     • 6–8 responsibilities
+     • 8–10 responsibilities
      • 4–6 key achievements (max 1–2 metrics)
    )` : `
    (OTHER ROLE REQUIREMENTS:
@@ -135,8 +135,8 @@ ${additionalInfo.map(info => `- ${info.category}: ${info.content}`).join('\n')}
 ${jobDescription}
 
 Guidelines:
-- MOST RECENT role: 1 summary, 6–8 responsibilities, 4–6 achievements
-- SECOND role: 1 summary, 6–8 responsibilities, 4–6 achievements
+- MOST RECENT role: 1 summary, 8–10 responsibilities, 4–6 achievements
+- SECOND role: 1 summary, 8–10 responsibilities, 4–6 achievements
 - OTHER roles: 1 summary, 3–5 responsibilities, 2–3 achievements each
 - Include **every role provided**, do not omit any.
 `;
