@@ -7,125 +7,51 @@ const openai = new OpenAI({
 async function generateCVContent(userProfile, jobDescription) {
   const { user, employmentHistory, education, certifications, additionalInfo } = userProfile;
 
-  const systemPrompt = `You are a professional resume/CV writer with expertise in creating ATS-friendly, compelling resumes. Your task is to generate a tailored resume based on the candidate's profile and the job description provided.
-
+  const systemPrompt = `You are a professional resume/CV writer specialized in ATS-optimized resumes for technical roles.
 CRITICAL GUIDELINES:
-1. Tailor the resume to match the job requirements precisely
-2. Use a natural, professional tone. Avoid overuse of metrics and percentages.
-Only include quantifiable achievements (metrics, percentages, numbers) in 2–3 bullet points for the MOST RECENT position.
-All other bullet points should focus on responsibilities, impact, technologies, and collaboration without forced metrics.
-3. Keep it professional and impactful
-4. Highlight the most relevant skills and experiences for this specific job
-5. Use keywords from the job description naturally throughout
-6. Do NOT fabricate information - only use and enhance what's provided
-7. Generate skills based on the candidate's experience and the job requirements
-8. Avoid repetitive sentence structures and overuse of buzzwords.
-9. Vary sentence tone and phring across bullet points.
-10. Write like an experienced senior engineer, not a marketing document.
 
-EXPERIENCE STRUCTURE (MANDATORY):
+1. Tailor the resume to the job description (JD) precisely.
+2. Focus 85–90% on technical skills/tools (programming languages, frameworks, databases, cloud, DevOps, APIs, architecture, testing, AI/ML if applicable). 
+3. Limit soft skills to MAX 1 category and 5–8 items total.
+4. Generate ATS-friendly, professional, non-marketing tone.
+5. Use JD keywords naturally across experience and skills.
+6. Do NOT fabricate experiences or skills.
+7. Prioritize recent roles with strong alignment to the JD; older roles can be generalized.
+8. Experience section structure:
 
-For EACH position, return:
+MOST RECENT ROLE:
+- Summary: 1 sentence describing role and impact
+- Responsibilities: 6–8 bullets (focus on systems, architecture, collaboration, technologies; minimal metrics)
+- KeyAchievements: 4–6 bullets (only 2–3 with metrics)
 
-- "summary": 1 sentence describing role and impact
-- "responsibilities": array of bullet points (day-to-day work, JD-aligned tasks)
-- "keyAchievements": array of bullet points (impact, outcomes, improvements)
+SECOND ROLE:
+- Summary: 1 sentence
+- Responsibilities: 6–8 bullets
+- KeyAchievements: 4–6 bullets (max 1–2 metrics)
 
-RULES:
-- MOST RECENT ROLE:
-  - 6–8 responsibilities
-  - 4–6 keyAchievements (ONLY 2–3 with metrics)
+OTHER ROLES:
+- Summary: 1 sentence
+- Responsibilities: 3–5 bullets
+- KeyAchievements: 2–3 bullets
 
-- SECOND ROLE:
-  - 6–8 responsibilities
-  - 4–6 keyAchievements (max 1–2 metrics)
+Skills Section:
+- EXACTLY 10 categories
+- Each category ≥ 8 technical skills (tools, frameworks, programming languages, databases, cloud, DevOps, testing)
+- Include ALL JD skills, no duplicates
+- Soft skills only in one category (max 5–8 items)
+- Format: "Category: skill1, skill2, skill3..."
 
-- OTHER ROLES:
-  - 3–5 responsibilities
-  - 2–3 keyAchievements
-
-EXPERIENCE ALIGNMENT RULES (CRITICAL):
-
-1. ALIGN WITH JOB DESCRIPTION:
-   - Each bullet point MUST reflect responsibilities and requirements from the JOB DESCRIPTION
-   - Reframe the candidate’s past experience to closely match the target role
-   - Use similar terminology, tools, and patterns from the JD
-
-2. INCORPORATE JD SKILLS:
-   - Use skills and technologies from the JOB DESCRIPTION within bullet points
-   - Ensure JD keywords appear naturally across the experience section
-   - Prioritize high-impact and frequently mentioned JD skills
-
-3. ADAPT TO TARGET JOB TITLE:
-   - Interpret the TARGET JOB TITLE from the job description
-   - Adjust tone and responsibilities to match expectations of that role
-     Example:
-     - Backend role → APIs, microservices, scalability, databases
-     - Frontend role → UI/UX, performance, accessibility
-     - Data role → pipelines, ETL, analytics, ML
-     - DevOps → CI/CD, infrastructure, automation
-
-4. DO NOT FABRICATE:
-   - Do NOT introduce completely new experiences or technologies not implied by the candidate’s background
-   - You MAY generalize or reframe existing experience to better match the JD
-
-5. PRIORITIZATION:
-   - Most recent roles should have the STRONGEST alignment with the JD
-   - Older roles can be less aligned but still relevant
-
-6. NATURAL INTEGRATION:
-   - Do NOT keyword-stuff
-   - Blend JD skills into real-world responsibilities naturally
-
-SUMMARY GUIDELINES:
-- Write a compelling 7-8 sentence professional summary in FIRST PERSON (use "I" statements)
-- Do NOT mention the candidate's name in the summary
-- Start with years of experience and primary role focus (e.g., "I am a Software Engineer with 10+ years of experience...")
-- Include 2-3 key areas of expertise with specific technologies
-- Mention notable achievements with metrics where possible
-- Include relevant industry experience and domain knowledge
-- Highlight leadership experience or team collaboration
-- Mention any relevant certifications or specialized training
-- End with value proposition and career objectives
-- Include relevant keywords from the job description naturally
-
-SKILLS GUIDELINES (STRICT - FIXED STRUCTURE):
-
-1. Extract ALL skills, tools, technologies, frameworks, and keywords explicitly mentioned in the JOB DESCRIPTION.
-   - Do NOT miss any skill
-   - Keep original wording (no paraphrasing)
-
-2. Create EXACTLY 10 SKILL CATEGORIES.
-   - Categories MUST be relevant to the job description
-   - Do NOT create more or fewer than 10 categories
-   - Examples: Backend, Frontend, Data Engineering, Cloud, DevOps, Testing, Security, Architecture, Tools, Soft Skills (adjust based on JD)
-
-3. Each category MUST contain AT LEAST 8 relevant skills.
-   - Prefer 10–20 skills per category when possible
-
-4. ALL JD skills MUST appear in the skills section.
-   - Each skill must appear ONLY ONCE (no duplicates)
-
-5. Add additional relevant skills from the candidate’s experience to meet the category size requirement.
-
-6. Maintain logical grouping (do not randomly distribute skills).
-
-7. OUTPUT FORMAT (STRICT STRING FORMAT):
-Category Name 1: skill1, skill2, skill3...
-Category Name 2: skill1, skill2, skill3...
-...
-Category Name 10: skill1, skill2, skill3...
-OUTPUT FORMAT (JSON):
+Output JSON:
 {
-  "summary": "Detailed 7-8 sentence professional summary in FIRST PERSON (using 'I' statements, without mentioning name) tailored to the job with specific expertise, achievements, domain knowledge, and career objectives",
-  "skills": "Category Name 1: skill1, skill2, skill3...\\nCategory Name 2: skill1, skill2, skill3...\\nCategory Name 3: skill1, skill2, skill3...\\n...",
+  "summary": "... 7–8 sentence first-person summary, including technical expertise, achievements, domain knowledge, leadership, career objectives, JD keywords",
+  "skills": "Category1: ..., Category2: ... ...",
   "experience": [
     {
       "position": "Job Title",
       "company": "Company Name",
       "location": "City, State",
       "period": "Start - End",
-      "summary": "One sentence summary",
+      "summary": "1 sentence summary",
       "responsibilities": ["...", "..."],
       "keyAchievements": ["...", "..."]
     }
@@ -135,19 +61,11 @@ OUTPUT FORMAT (JSON):
       "degree": "Degree Name",
       "institution": "School Name",
       "graduation": "Year",
-      "details": "Optional details like honors, relevant coursework"
+      "details": "Optional details"
     }
   ],
-  "certifications": ["Certification Name (Issuer, Date)"],
-  "additionalSections": [
-    {
-      "title": "Section Title",
-      "content": "Content"
-    }
-  ]
-}
-IMPORTANT: Before generating the final output, internally extract and list all skills from the job description and ensure 100% of them appear in the skills section.  
-`
+  "certifications": ["Certification Name (Issuer, Date)"]
+}`
 ;
 
  const userPrompt = `Generate a tailored resume for the following candidate applying to this job:
@@ -209,71 +127,6 @@ ${additionalInfo.map(info => `- ${info.category}: ${info.content}`).join('\n')}
 ## JOB DESCRIPTION
 
 ${jobDescription}
-
----
-
-Generate a professional, highly tailored resume in the JSON format specified.
-
-CRITICAL REQUIREMENTS:
-
-1. SUMMARY:
-- Must be 7–8 sentences in FIRST PERSON ("I" statements)
-- Do NOT mention the candidate’s name
-- Include experience, technical expertise, domain knowledge, leadership, and impact
-- Naturally incorporate keywords from the job description
-
-2. SKILLS:
-- Must include ALL skills from the JOB DESCRIPTION
-- Must contain AT LEAST 100 total skills
-- Must be grouped into EXACTLY 10 categories
-- Each category must have at least 8 skills
-- No duplicate skills
-- Maintain exact formatting:
-  "Category: skill1, skill2, skill3..."
-
-3. EXPERIENCE (STRICT STRUCTURE):
-
-Each position MUST follow this structure:
-
-{
-  "summary": "1 sentence describing role and impact",
-  "responsibilities": ["...", "..."],
-  "keyAchievements": ["...", "..."]
-}
-
-- Responsibilities:
-  • Focus on systems, architecture, collaboration, and JD alignment
-  • Do NOT overuse metrics
-
-- Key Achievements:
-  • Focus on impact, improvements, outcomes
-  • Only MOST RECENT role: 2–3 metrics allowed
-  • Other roles: minimal or no metrics
-
-4. EXPERIENCE ALIGNMENT (VERY IMPORTANT):
-
-- Experience MUST be rewritten to closely match the job description
-- Use terminology, tools, and skills from the JD naturally
-- Adapt responsibilities to match the TARGET ROLE (backend, data, frontend, etc.)
-- Do NOT copy text from the JD
-- Do NOT fabricate new technologies not implied by the candidate background
-
-5. PRIORITY:
-
-- MOST RECENT ROLE → strongest alignment with JD
-- SECOND ROLE → strong alignment
-- OLDER ROLES → lighter alignment but still relevant
-
-6. OUTPUT RULES:
-
-- Return VALID JSON only
-- Do NOT include "additionalSections"
-- Do NOT include explanations or extra text
-
-FINAL CHECK BEFORE OUTPUT:
-- Ensure ALL job description skills are included in the skills section
-- Ensure experience uses JD terminology naturally
-- Ensure correct structure for summary, responsibilities, and keyAchievements
 `;
 
   try {
