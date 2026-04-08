@@ -133,6 +133,12 @@ ${additionalInfo.map(info => `- ${info.category}: ${info.content}`).join('\n')}
 ## JOB DESCRIPTION
 
 ${jobDescription}
+
+Guidelines:
+- MOST RECENT role: 1 summary, 6–8 responsibilities, 4–6 achievements
+- SECOND role: 1 summary, 6–8 responsibilities, 4–6 achievements
+- OTHER roles: 1 summary, 3–5 responsibilities, 2–3 achievements each
+- Include **every role provided**, do not omit any.
 `;
 
   try {
