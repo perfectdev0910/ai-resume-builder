@@ -21,17 +21,17 @@ CRITICAL GUIDELINES:
 
 MOST RECENT ROLE:
 - Summary: 1 sentence describing role and impact
-- Responsibilities: 6–8 bullets (focus on systems, architecture, collaboration, technologies; minimal metrics)
-- KeyAchievements: 4–6 bullets (only 2–3 with metrics)
+- Responsibilities: 6–8 bullets. Each bullet should be a full sentence describing complex tasks, system design, technologies, collaboration, and measurable impact where appropriate. Avoid single-line fragments.
+- KeyAchievements: 4–6 bullets. Include detailed outcomes and improvements. Only 2–3 bullets may include metrics.
 
 SECOND ROLE:
 - Summary: 1 sentence
-- Responsibilities: 6–8 bullets
-- KeyAchievements: 4–6 bullets (max 1–2 metrics)
+- Responsibilities: 6–8 bullets, detailed and descriptive
+- KeyAchievements: 4–6 bullets, max 1–2 with metrics
 
 OTHER ROLES:
 - Summary: 1 sentence
-- Responsibilities: 3–5 bullets
+- Responsibilities: 3–5 bullets, descriptive
 - KeyAchievements: 2–3 bullets
 
 Skills Section:
@@ -39,12 +39,13 @@ Skills Section:
 - Each category ≥ 8 technical skills (tools, frameworks, programming languages, databases, cloud, DevOps, testing)
 - Include ALL JD skills, no duplicates
 - Soft skills only in one category (max 5–8 items)
-- Format: "Category: skill1, skill2, skill3..."
+- Each category must be on its own line, in this format:
+  Category Name: skill1, skill2, skill3, ..., skillN
 
 Output JSON:
 {
   "summary": "... 7–8 sentence first-person summary, including technical expertise, achievements, domain knowledge, leadership, career objectives, JD keywords",
-  "skills": "Category1: ..., Category2: ... ...",
+  "skills": "Category1: skill1, skill2, skill3, ..., skillN\\nCategory2: skill1, skill2, skill3, ..., skillN\\nCategory3: ...",
   "experience": [
     {
       "position": "Job Title",
@@ -52,8 +53,14 @@ Output JSON:
       "location": "City, State",
       "period": "Start - End",
       "summary": "1 sentence summary",
-      "responsibilities": ["...", "..."],
-      "keyAchievements": ["...", "..."]
+      "responsibilities": [
+        "Full descriptive sentence of responsibility with technologies, collaboration, and system context.",
+        "Another detailed responsibility showing impact and alignment with JD."
+      ],
+      "keyAchievements": [
+        "Detailed achievement describing outcome, improvements, or optimization; include metrics for only allowed bullets.",
+        "Another achievement bullet describing problem solved, technologies used, or business impact."
+      ]
     }
   ],
   "education": [
@@ -65,8 +72,7 @@ Output JSON:
     }
   ],
   "certifications": ["Certification Name (Issuer, Date)"]
-}`
-;
+}`;
 
  const userPrompt = `Generate a tailored resume for the following candidate applying to this job:
 
