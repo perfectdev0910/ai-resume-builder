@@ -11,9 +11,9 @@ console.log("DATABASE_URL =", process.env.DATABASE_URL);
 // Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: false }
-    : false
+  ssl: { rejectUnauthorized: false },
+  max: 5,      
+  connectionTimeoutMillis: 10000,
 });
 
 // Generic query helper
@@ -44,9 +44,10 @@ async function getAll(sql, params = []) {
 
 // Initialize database tables
 async function initDatabase() {
-  const client = await pool.connect();
+   let client;
+
   try {
-    await client.query('BEGIN');
+    client = await pool.connect();
 
     // Users table
     await client.query(`
