@@ -102,6 +102,13 @@ ${index + 1}. **${job.position}** at **${job.company}**
    Period: ${job.start_date || ''} - ${job.end_date || 'Present'}
    Description: ${job.description || 'N/A'}
 
+      (TITLE OPTIMIZATION RULE:
+   - Align the job title with the JOB DESCRIPTION keywords for ATS optimization.
+   - DO NOT fabricate seniority or misrepresent the role.
+   - If alignment is needed, use format:
+     "ATS-Optimized Title (Original Title)"
+   - Ensure consistency with responsibilities and experience level.)
+
    ${index === 0 ? `
    (MOST RECENT ROLE REQUIREMENTS:
    - Generate:
@@ -142,6 +149,15 @@ ${additionalInfo.map(info => `- ${info.category}: ${info.content}`).join('\n')}
 ## JOB DESCRIPTION
 
 ${jobDescription}
+
+## STRICT OUTPUT RULES
+
+- Apply TITLE OPTIMIZATION RULE to EVERY role
+- MOST RECENT role MUST include INDUSTRY/DOMAIN mention in summary
+- Maintain factual consistency with provided experience
+- Do NOT omit any role
+- Ensure alignment with JD keywords across titles, responsibilities, and achievements
+- Avoid generic phrasing; keep it technical and ATS-optimized
 
 Guidelines:
 - MOST RECENT role: 1 summary, 8–10 responsibilities, 4–6 achievements
