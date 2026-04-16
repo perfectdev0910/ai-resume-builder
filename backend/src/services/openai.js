@@ -42,6 +42,15 @@ Skills Section:
 - Each category must be on its own line, in this format:
   Category Name: skill1, skill2, skill3, ..., skillN
 
+9. Job Titles:
+- Adjust job titles to align with the JD keywords for ATS optimization, but DO NOT fabricate seniority or misrepresent roles.
+- If needed, use this format:
+  "ATS-Optimized Title (Original Title)"
+- Ensure consistency with responsibilities and experience level.
+
+10. Industry Experience:
+- In the MOST RECENT ROLE summary, explicitly mention relevant industry/domain experience (e.g., fintech, healthcare, SaaS, AI, e-commerce) based on the candidate’s work and JD context.
+
 Output JSON:
 {
   "summary": "... 7–8 sentence first-person summary, including technical expertise, achievements, domain knowledge, leadership, career objectives, JD keywords",
