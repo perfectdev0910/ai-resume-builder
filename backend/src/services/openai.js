@@ -177,7 +177,6 @@ Guidelines:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.3,
       max_completion_tokens: 4000,
       response_format: { type: 'json_object' }
     });
@@ -247,7 +246,6 @@ Write a compelling, personalized cover letter that connects the candidate's expe
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.8,
       max_completion_tokens: 1500,
       response_format: { type: 'json_object' }
     });
@@ -265,12 +263,11 @@ async function extractJobDetails(jdContent) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-5.5-mini',
+      model: 'gpt-5.5',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: jdContent.substring(0, 2000) }
       ],
-      temperature: 0,
       max_completion_tokens: 200,
       response_format: { type: 'json_object' }
     });
