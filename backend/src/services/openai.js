@@ -19,20 +19,15 @@ CRITICAL GUIDELINES:
 7. Prioritize recent roles with strong alignment to the JD; older roles can be generalized.
 8. Experience section structure:
 
-MOST RECENT ROLE:
+MOST RECENT ROLE AND SECOND ROLE:
 - Summary: 1 sentence describing role and impact
 - Responsibilities: 8-10 bullets. Each bullet should be a full sentence describing complex tasks, system design, technologies, collaboration, and measurable impact where appropriate. Avoid single-line fragments.
-- KeyAchievements: 4–6 bullets. Include detailed outcomes and improvements. Only 2–3 bullets may include metrics. 
-
-SECOND ROLE:
-- Summary: 1 sentence
-- Responsibilities: 8–10 bullets, detailed and descriptive as above
-- KeyAchievements: 4–6 bullets, max 1–2 with metrics
+- KeyAchievements: 3-4 bullets. Include detailed outcomes and improvements. Only 2 bullets may include metrics. 
 
 OTHER ROLES:
 - Summary: 1 sentence
-- Responsibilities: 3–5 bullets, descriptive as above
-- KeyAchievements: 2–3 bullets
+- Responsibilities: 3 bullets, descriptive as above
+- KeyAchievements: 1 bullets
 
 Skills Section:
 - EXACTLY 10 categories
@@ -114,19 +109,19 @@ ${index + 1}. **${job.position}** at **${job.company}**
    - Generate:
      • 1 strong summary (1 sentence)
      • 8–10 responsibilities (NO metrics, focus on systems, architecture, JD alignment)
-     • 4–6 key achievements (ONLY 2–3 with metrics)
+     • 3–4 key achievements (ONLY 2 with metrics)
    )` : index === 1 ? `
    (SECOND ROLE REQUIREMENTS:
    - Generate:
      • 1 summary
-     • 8–10 responsibilities
-     • 4–6 key achievements (max 1–2 metrics)
+     • 8–10 responsibilities (NO metrics, focus on systems, architecture, JD alignment)
+     • 3–4 key achievements (ONLY 2 with metrics)
    )` : `
    (OTHER ROLE REQUIREMENTS:
    - Generate:
      • 1 summary
-     • 3–5 responsibilities
-     • 2–3 key achievements
+     • 3 responsibilities
+     • 1 key achievements
    )`}
 `).join('\n')}
 
@@ -160,9 +155,9 @@ ${jobDescription}
 - Avoid generic phrasing; keep it technical and ATS-optimized
 
 Guidelines:
-- MOST RECENT role: 1 summary, 8–10 responsibilities, 4–6 achievements
-- SECOND role: 1 summary, 8–10 responsibilities, 4–6 achievements
-- OTHER roles: 1 summary, 3–5 responsibilities, 2–3 achievements each
+- MOST RECENT role: 1 summary, 8–10 responsibilities, 3 achievements
+- SECOND role: 1 summary, 8–10 responsibilities, 3 achievements
+- OTHER roles: 1 summary, 3 responsibilities, 1 achievements each
 - Include **every role provided**, do not omit any.
 `;
 
