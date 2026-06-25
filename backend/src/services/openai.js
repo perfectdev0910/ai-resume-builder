@@ -184,6 +184,7 @@ OUTPUT FORMAT (STRICT JSON):
     });
 
     const content = response.choices[0].message.content;
+    console.log(content);
     return safeParse(content);
   } catch (error) {
     console.error('OpenAI API error:', error);

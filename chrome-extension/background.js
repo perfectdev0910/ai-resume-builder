@@ -6,8 +6,8 @@ chrome.runtime.onInstalled.addListener((details) => {
     // Set default configuration
     chrome.storage.local.set({
       config: {
-        apiUrl: 'http://localhost:3000',
-        dashboardUrl: 'http://localhost:5173'
+        apiUrl: 'https://ai-resume-builder-api-8aj2.onrender.com/',
+        dashboardUrl: 'https://ai-resume-builder-rtl9.vercel.app/'
       }
     });
     console.log('AI Resume Builder extension installed');

@@ -1,7 +1,7 @@
 // Default configuration
 const DEFAULT_CONFIG = {
-  apiUrl: 'http://localhost:3000',
-  dashboardUrl: 'http://localhost:5173'
+  apiUrl: 'https://ai-resume-builder-api-8aj2.onrender.com/api',
+  dashboardUrl: 'https://ai-resume-builder-rtl9.vercel.app/'
 };
 
 // Helper to sanitize filename
