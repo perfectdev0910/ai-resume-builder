@@ -114,17 +114,27 @@ INSTRUCTIONS
 - Maintain factual consistency with provided data
 - Optimize for ATS keyword matching
 - Focus 85–90% on technical skills
+- Limit soft skills to MAX 1 category and 5–8 items total.
 - Keep soft skills minimal (max 1 category)
 - Ensure all roles are included
+- Prioritize recent roles with strong alignment to the JD; older roles can be generalized
+- Use JD keywords naturally across experience and skills
 
 ROLE HANDLING RULES:
+- In the MOST RECENT ROLE summary, explicitly mention relevant industry/domain experience (e.g., fintech, healthcare, SaaS, AI, e-commerce) based on the candidate’s work and JD context.
+- Full descriptive sentence of responsibility with technologies, collaboration, and system context.
+- Another detailed responsibility showing impact and alignment with JD
 - Most recent role: 1 summary, 8–10 responsibilities, 3–4 achievements (max 2 with metrics)
 - Second role: same structure as above
 - Other roles: 1 summary, 3 responsibilities, 1 achievement
 
+Job Titles: 
+- Adjust job titles to align with the JD keywords for ATS optimization, but DO NOT fabricate seniority or misrepresent roles.
+- If needed, use this format: "ATS-Optimized Title (Original Title)" - Ensure consistency with responsibilities and experience level.
+
 SKILLS RULES:
 - Exactly 10 categories
-- Each category must include 8+ skills
+- Each category ≥ 8 technical skills (tools, frameworks, programming languages, databases, cloud, DevOps, testing)
 - Include all JD skills where relevant
 - One category may contain soft skills only
 
