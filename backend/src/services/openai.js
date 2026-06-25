@@ -168,12 +168,12 @@ Guidelines:
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.5',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.7,
+      temperature: 0.3,
       max_tokens: 4000,
       response_format: { type: 'json_object' }
     });
@@ -238,7 +238,7 @@ Write a compelling, personalized cover letter that connects the candidate's expe
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.5',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -261,7 +261,7 @@ async function extractJobDetails(jdContent) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5.5-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: jdContent.substring(0, 2000) }
