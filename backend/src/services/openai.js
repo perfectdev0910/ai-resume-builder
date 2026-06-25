@@ -141,28 +141,34 @@ SKILLS RULES:
 OUTPUT FORMAT (STRICT JSON):
 
 {
-  "summary": "string (7–8 sentences, first person, ATS optimized)",
-  "skills": "Category: skill1, skill2, ...\\nCategory2: ...",
+  "summary": "... 7–8 sentence first-person summary, including technical expertise, achievements, domain knowledge, leadership, career objectives, JD keywords",
+  "skills": "Category1: skill1, skill2, skill3, ..., skillN\\nCategory2: skill1, skill2, skill3, ..., skillN\\nCategory3: ...",
   "experience": [
     {
-      "position": "string",
-      "company": "string",
-      "location": "string",
-      "period": "string",
-      "summary": "string",
-      "responsibilities": ["string"],
-      "keyAchievements": ["string"]
+      "position": "Job Title",
+      "company": "Company Name",
+      "location": "City, State",
+      "period": "Start - End",
+      "summary": "1 sentence summary",
+      "responsibilities": [
+        "Full descriptive sentence of responsibility with technologies, collaboration, and system context.",
+        "Another detailed responsibility showing impact and alignment with JD."
+      ],
+      "keyAchievements": [
+        "Detailed achievement describing outcome, improvements, or optimization; include metrics for only allowed bullets.",
+        "Another achievement bullet describing problem solved, technologies used, or business impact."
+      ]
     }
   ],
   "education": [
     {
-      "degree": "string",
-      "institution": "string",
-      "graduation": "string",
-      "details": "string"
+      "degree": "Degree Name",
+      "institution": "School Name",
+      "graduation": "Year",
+      "details": "Optional details"
     }
   ],
-  "certifications": ["string"]
+  "certifications": ["Certification Name (Issuer, Date)"]
 }
 `;
 
