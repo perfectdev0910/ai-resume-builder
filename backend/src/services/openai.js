@@ -4,6 +4,15 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'sk-placeholder'
 });
 
+function safeParse(jsonString) {
+  try {
+    return JSON.parse(jsonString);
+  } catch (e) {
+    console.error("JSON parse failed:", jsonString);
+    throw new Error("Invalid JSON returned by model");
+  }
+}
+
 async function generateCVContent(userProfile, jobDescription) {
   const { user, employmentHistory, education, certifications, additionalInfo } = userProfile;
 
@@ -169,12 +178,12 @@ Guidelines:
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.3,
-      max_tokens: 4000,
-      response_format: { type: 'json_object' }
+      max_completion_tokens: 4000,
+      response_format: { type: 'json_object', strict: true }
     });
 
     const content = response.choices[0].message.content;
-    return JSON.parse(content);
+    return safeParse(content);
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw new Error('Failed to generate CV content');
@@ -239,12 +248,12 @@ Write a compelling, personalized cover letter that connects the candidate's expe
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.8,
-      max_tokens: 1500,
-      response_format: { type: 'json_object' }
+      max_completion_tokens: 1500,
+      response_format: { type: 'json_object', strict: true }
     });
 
     const content = response.choices[0].message.content;
-    return JSON.parse(content);
+    return safeParse(content);
   } catch (error) {
     console.error('Cover letter generation error:', error);
     throw new Error('Failed to generate cover letter');
@@ -262,11 +271,11 @@ async function extractJobDetails(jdContent) {
         { role: 'user', content: jdContent.substring(0, 2000) }
       ],
       temperature: 0,
-      max_tokens: 100,
-      response_format: { type: 'json_object' }
+      max_completion_tokens: 200,
+      response_format: { type: 'json_object', strict: true }
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    return safeParse(response.choices[0].message.content);
   } catch (error) {
     console.error('Job details extraction error:', error);
     return { jobTitle: 'Not specified', companyName: 'Not specified' };
