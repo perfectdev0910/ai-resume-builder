@@ -54,9 +54,9 @@ SECOND ROLE:
 - KeyAchievements: 4–6 bullets, max 1–2 with metrics
 
 OTHER ROLES:
-- Summary: 1 sentence
-- Responsibilities: 3–5 bullets, descriptive as above
-- KeyAchievements: 2–3 bullets
+- Summary: Null
+- Responsibilities: 3 bullets, descriptive as above
+- KeyAchievements: Null
 
 Skills Section:
 - EXACTLY 10 categories
@@ -66,13 +66,7 @@ Skills Section:
 - Each category must be on its own line, in this format:
   Category Name: skill1, skill2, skill3, ..., skillN
 
-9. Job Titles:
-- Adjust job titles to align with the JD keywords for ATS optimization, but DO NOT fabricate seniority or misrepresent roles.
-- If needed, use this format:
-  "ATS-Optimized Title (Original Title)"
-- Ensure consistency with responsibilities and experience level.
-
-10. Industry Experience:
+9. Industry Experience:
 - In the MOST RECENT ROLE summary, explicitly mention relevant industry/domain experience (e.g., fintech, healthcare, SaaS, AI, e-commerce) based on the candidate’s work and JD context.
 
 Output JSON:
@@ -126,12 +120,6 @@ ${index + 1}. **${job.position}** at **${job.company}**
    Period: ${job.start_date || ''} - ${job.end_date || 'Present'}
    Description: ${job.description || 'N/A'}
 
-      (TITLE OPTIMIZATION RULE:
-   - Align the job title with the JOB DESCRIPTION keywords for ATS optimization.
-   - DO NOT fabricate seniority or misrepresent the role.
-   - If alignment is needed, use format:
-     "ATS-Optimized Title (Original Title)"
-   - Ensure consistency with responsibilities and experience level.)
 
    ${index === 0 ? `
    (MOST RECENT ROLE REQUIREMENTS:
@@ -148,9 +136,7 @@ ${index + 1}. **${job.position}** at **${job.company}**
    )` : `
    (OTHER ROLE REQUIREMENTS:
    - Generate:
-     • 1 summary
-     • 3–5 responsibilities
-     • 2–3 key achievements
+     • 3 responsibilities
    )`}
 `).join('\n')}
 
@@ -186,7 +172,7 @@ ${jobDescription}
 Guidelines:
 - MOST RECENT role: 1 summary, 8–10 responsibilities, 4–6 achievements
 - SECOND role: 1 summary, 8–10 responsibilities, 4–6 achievements
-- OTHER roles: 1 summary, 3–5 responsibilities, 2–3 achievements each
+- OTHER roles: 3 responsibilities
 - Include **every role provided**, do not omit any.
 `;
 
