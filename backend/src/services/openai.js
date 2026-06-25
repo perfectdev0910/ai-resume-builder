@@ -4,6 +4,30 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'sk-placeholder'
 });
 
+
+function safeParse(jsonString) {
+  try {
+    return JSON.parse(jsonString);
+  } catch (e) {
+    console.error("JSON parse failed:", jsonString);
+
+    // 🔥 emergency repair attempt
+    try {
+      const start = jsonString.indexOf("{");
+      const end = jsonString.lastIndexOf("}");
+      return JSON.parse(jsonString.slice(start, end + 1));
+    } catch (err) {
+      return {
+        summary: "",
+        skills: "",
+        experience: [],
+        education: [],
+        certifications: []
+      };
+    }
+  }
+}
+
 async function generateCVContent(userProfile, jobDescription) {
   const { user, employmentHistory, education, certifications, additionalInfo } = userProfile;
 
@@ -179,7 +203,7 @@ Guidelines:
     });
 
     const content = response.choices[0].message.content;
-    return JSON.parse(content);
+    return safeParse(content);
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw new Error('Failed to generate CV content');
