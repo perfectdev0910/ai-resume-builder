@@ -9,165 +9,151 @@ function safeParse(jsonString) {
     return JSON.parse(jsonString);
   } catch (e) {
     console.error("JSON parse failed:", jsonString);
-    throw new Error("Invalid JSON returned by model");
+
+    // 🔥 emergency repair attempt
+    try {
+      const start = jsonString.indexOf("{");
+      const end = jsonString.lastIndexOf("}");
+      return JSON.parse(jsonString.slice(start, end + 1));
+    } catch (err) {
+      return {
+        summary: "",
+        skills: "",
+        experience: [],
+        education: [],
+        certifications: []
+      };
+    }
   }
 }
 
 async function generateCVContent(userProfile, jobDescription) {
   const { user, employmentHistory, education, certifications, additionalInfo } = userProfile;
 
-  const systemPrompt = `You are a professional resume/CV writer specialized in ATS-optimized resumes for technical roles.
-CRITICAL GUIDELINES:
+  const systemPrompt = `You are a professional resume writer.
 
-1. Tailor the resume to the job description (JD) precisely.
-2. Focus 85–90% on technical skills/tools (programming languages, frameworks, databases, cloud, DevOps, APIs, architecture, testing, AI/ML if applicable). 
-3. Limit soft skills to MAX 1 category and 5–8 items total.
-4. Generate ATS-friendly, professional, non-marketing tone.
-5. Use JD keywords naturally across experience and skills.
-6. Do NOT fabricate experiences or skills.
-7. Prioritize recent roles with strong alignment to the JD; older roles can be generalized.
-8. Experience section structure:
+Return ONLY valid JSON.
 
-MOST RECENT ROLE AND SECOND ROLE:
-- Summary: 1 sentence describing role and impact
-- Responsibilities: 8-10 bullets. Each bullet should be a full sentence describing complex tasks, system design, technologies, collaboration, and measurable impact where appropriate. Avoid single-line fragments.
-- KeyAchievements: 3-4 bullets. Include detailed outcomes and improvements. Only 2 bullets may include metrics. 
+Do not include explanations, markdown, or extra text.
 
-OTHER ROLES:
-- Summary: 1 sentence
-- Responsibilities: 3 bullets, descriptive as above
-- KeyAchievements: 1 bullets
-
-Skills Section:
-- EXACTLY 10 categories
-- Each category ≥ 8 technical skills (tools, frameworks, programming languages, databases, cloud, DevOps, testing)
-- Include ALL JD skills, no duplicates
-- Soft skills only in one category (max 5–8 items)
-- Each category must be on its own line, in this format:
-  Category Name: skill1, skill2, skill3, ..., skillN
-
-9. Job Titles:
-- Adjust job titles to align with the JD keywords for ATS optimization, but DO NOT fabricate seniority or misrepresent roles.
-- If needed, use this format:
-  "ATS-Optimized Title (Original Title)"
-- Ensure consistency with responsibilities and experience level.
-
-10. Industry Experience:
-- In the MOST RECENT ROLE summary, explicitly mention relevant industry/domain experience (e.g., fintech, healthcare, SaaS, AI, e-commerce) based on the candidate’s work and JD context.
-
-Output JSON:
+Follow this structure exactly:
 {
-  "summary": "... 7–8 sentence first-person summary, including technical expertise, achievements, domain knowledge, leadership, career objectives, JD keywords",
-  "skills": "Category1: skill1, skill2, skill3, ..., skillN\\nCategory2: skill1, skill2, skill3, ..., skillN\\nCategory3: ...",
+  "summary": string,
+  "skills": string,
+  "experience": array,
+  "education": array,
+  "certifications": array
+}`;
+
+const userPrompt = `
+Generate a tailored ATS-optimized resume using the candidate data and job description below.
+
+Return ONLY valid JSON. No markdown, no explanations.
+
+---
+
+CANDIDATE PROFILE
+
+Name: ${user.full_name}
+Email: ${user.email}
+Phone: ${user.phone_number || 'N/A'}
+Location: ${user.address || 'N/A'}
+LinkedIn: ${user.linkedin_profile || 'N/A'}
+GitHub: ${user.github_link || 'N/A'}
+Years of Experience: ${user.experience_years || 0}
+
+---
+
+EMPLOYMENT HISTORY
+
+${employmentHistory.map((job, index) => `
+Role ${index + 1}:
+Title: ${job.position}
+Company: ${job.company}
+Location: ${job.location || 'N/A'}
+Period: ${job.start_date || ''} - ${job.end_date || 'Present'}
+Description: ${job.description || 'N/A'}
+`).join('\n')}
+
+---
+
+EDUCATION
+
+${education.map(edu => `
+- ${edu.degree} | ${edu.institution} | ${edu.graduation_date || 'N/A'}
+`).join('\n')}
+
+---
+
+CERTIFICATIONS
+
+${certifications.map(cert => `
+- ${cert.name} ${cert.issuer ? `(${cert.issuer})` : ''} ${cert.date_obtained || ''}
+`).join('\n')}
+
+---
+
+ADDITIONAL INFO
+
+${additionalInfo.map(info => `
+- ${info.category}: ${info.content}
+`).join('\n')}
+
+---
+
+JOB DESCRIPTION
+
+${jobDescription}
+
+---
+
+INSTRUCTIONS
+
+- Tailor the resume strictly to the job description
+- Do NOT fabricate experience or skills
+- Maintain factual consistency with provided data
+- Optimize for ATS keyword matching
+- Focus 85–90% on technical skills
+- Keep soft skills minimal (max 1 category)
+- Ensure all roles are included
+
+ROLE HANDLING RULES:
+- Most recent role: 1 summary, 8–10 responsibilities, 3–4 achievements (max 2 with metrics)
+- Second role: same structure as above
+- Other roles: 1 summary, 3 responsibilities, 1 achievement
+
+SKILLS RULES:
+- Exactly 10 categories
+- Each category must include 8+ skills
+- Include all JD skills where relevant
+- One category may contain soft skills only
+
+OUTPUT FORMAT (STRICT JSON):
+
+{
+  "summary": "string (7–8 sentences, first person, ATS optimized)",
+  "skills": "Category: skill1, skill2, ...\\nCategory2: ...",
   "experience": [
     {
-      "position": "Job Title",
-      "company": "Company Name",
-      "location": "City, State",
-      "period": "Start - End",
-      "summary": "1 sentence summary",
-      "responsibilities": [
-        "Full descriptive sentence of responsibility with technologies, collaboration, and system context.",
-        "Another detailed responsibility showing impact and alignment with JD."
-      ],
-      "keyAchievements": [
-        "Detailed achievement describing outcome, improvements, or optimization; include metrics for only allowed bullets.",
-        "Another achievement bullet describing problem solved, technologies used, or business impact."
-      ]
+      "position": "string",
+      "company": "string",
+      "location": "string",
+      "period": "string",
+      "summary": "string",
+      "responsibilities": ["string"],
+      "keyAchievements": ["string"]
     }
   ],
   "education": [
     {
-      "degree": "Degree Name",
-      "institution": "School Name",
-      "graduation": "Year",
-      "details": "Optional details"
+      "degree": "string",
+      "institution": "string",
+      "graduation": "string",
+      "details": "string"
     }
   ],
-  "certifications": ["Certification Name (Issuer, Date)"]
-}`;
-
- const userPrompt = `Generate a tailored resume for the following candidate applying to this job:
-
-## CANDIDATE PROFILE
-
-**Name:** ${user.full_name}
-**Email:** ${user.email}
-**Phone:** ${user.phone_number || 'N/A'}
-**Location:** ${user.address || 'N/A'}
-**LinkedIn:** ${user.linkedin_profile || 'N/A'}
-**GitHub:** ${user.github_link || 'N/A'}
-**Years of Experience:** ${user.experience_years || 0}
-
-### Employment History (Listed from most recent)
-${employmentHistory.map((job, index) => `
-${index + 1}. **${job.position}** at **${job.company}**
-   Location: ${job.location || 'N/A'}
-   Period: ${job.start_date || ''} - ${job.end_date || 'Present'}
-   Description: ${job.description || 'N/A'}
-
-      (TITLE OPTIMIZATION RULE:
-   - Align the job title with the JOB DESCRIPTION keywords for ATS optimization.
-   - DO NOT fabricate seniority or misrepresent the role.
-   - If alignment is needed, use format:
-     "ATS-Optimized Title (Original Title)"
-   - Ensure consistency with responsibilities and experience level.)
-
-   ${index === 0 ? `
-   (MOST RECENT ROLE REQUIREMENTS:
-   - Generate:
-     • 1 strong summary (1 sentence)
-     • 8–10 responsibilities (NO metrics, focus on systems, architecture, JD alignment)
-     • 3–4 key achievements (ONLY 2 with metrics)
-   )` : index === 1 ? `
-   (SECOND ROLE REQUIREMENTS:
-   - Generate:
-     • 1 summary
-     • 8–10 responsibilities (NO metrics, focus on systems, architecture, JD alignment)
-     • 3–4 key achievements (ONLY 2 with metrics)
-   )` : `
-   (OTHER ROLE REQUIREMENTS:
-   - Generate:
-     • 1 summary
-     • 3 responsibilities
-     • 1 key achievements
-   )`}
-`).join('\n')}
-
-### Education
-${education.map(edu => `
-- **${edu.degree}** - ${edu.institution}
-  Location: ${edu.location || 'N/A'}
-  Graduation: ${edu.graduation_date || 'N/A'}
-  ${edu.gpa ? `GPA: ${edu.gpa}` : ''}
-`).join('\n')}
-
-### Certifications
-${certifications.map(cert => `- ${cert.name}${cert.issuer ? ` (${cert.issuer})` : ''}${cert.date_obtained ? ` - ${cert.date_obtained}` : ''}${cert.credly_link ? ` [Verified: ${cert.credly_link}]` : ''}`).join('\n')}
-
-### Additional Information
-${additionalInfo.map(info => `- ${info.category}: ${info.content}`).join('\n')}
-
----
-
-## JOB DESCRIPTION
-
-${jobDescription}
-
-## STRICT OUTPUT RULES
-
-- Apply TITLE OPTIMIZATION RULE to EVERY role
-- MOST RECENT role MUST include INDUSTRY/DOMAIN mention in summary
-- Maintain factual consistency with provided experience
-- Do NOT omit any role
-- Ensure alignment with JD keywords across titles, responsibilities, and achievements
-- Avoid generic phrasing; keep it technical and ATS-optimized
-
-Guidelines:
-- MOST RECENT role: 1 summary, 8–10 responsibilities, 3 achievements
-- SECOND role: 1 summary, 8–10 responsibilities, 3 achievements
-- OTHER roles: 1 summary, 3 responsibilities, 1 achievements each
-- Include **every role provided**, do not omit any.
+  "certifications": ["string"]
+}
 `;
 
   try {
