@@ -179,7 +179,7 @@ Guidelines:
       ],
       temperature: 0.3,
       max_completion_tokens: 4000,
-      response_format: { type: 'json_object', strict: true }
+      response_format: { type: 'json_object' }
     });
 
     const content = response.choices[0].message.content;
@@ -249,7 +249,7 @@ Write a compelling, personalized cover letter that connects the candidate's expe
       ],
       temperature: 0.8,
       max_completion_tokens: 1500,
-      response_format: { type: 'json_object', strict: true }
+      response_format: { type: 'json_object' }
     });
 
     const content = response.choices[0].message.content;
@@ -272,7 +272,7 @@ async function extractJobDetails(jdContent) {
       ],
       temperature: 0,
       max_completion_tokens: 200,
-      response_format: { type: 'json_object', strict: true }
+      response_format: { type: 'json_object' }
     });
 
     return safeParse(response.choices[0].message.content);
