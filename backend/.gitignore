@@ -1,0 +1,79 @@
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Coverage
+coverage/
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+
+# Uploads
+uploads/
+public/uploads/
+
+# Package manager
+.pnpm-store/
+.yarn/
+.npm/
+
+# Misc
+*.tgz
+
+# Optional: Ignore lock file (NOT recommended for applications)
+# package-lock.json
+# yarn.lock
+
+# Render
+.render
+
+# Secrets
+*.pem
+*.key
+*.crt
+
+# Generated files
+*.csv
+*.xlsx
+*.pdf
