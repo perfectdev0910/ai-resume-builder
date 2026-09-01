@@ -23,7 +23,7 @@ services:
       - key: STORAGE_PROVIDER
         value: supabase
       # Add these in Render Dashboard:
-      # - OPENAI_API_KEY
+      # - DEEPSEEK_API_KEY
       # - FRONTEND_URL
       # - DATABASE_URL (from Supabase)
       # - SUPABASE_URL

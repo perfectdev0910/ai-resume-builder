@@ -1,25 +1,41 @@
 const OpenAI = require('openai');
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'sk-placeholder'
-});
+const DEFAULT_BASE_URL = 'https://api.deepseek.com';
+const DEFAULT_MODEL = 'deepseek-v4-flash';
 
+function getClient() {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error('DEEPSEEK_API_KEY is not configured');
+  }
+
+  return new OpenAI({
+    apiKey,
+    baseURL: process.env.DEEPSEEK_BASE_URL || DEFAULT_BASE_URL
+  });
+}
+
+function getModel(kind = 'default') {
+  if (kind === 'fast') {
+    return process.env.DEEPSEEK_FAST_MODEL || process.env.DEEPSEEK_MODEL || DEFAULT_MODEL;
+  }
+  return process.env.DEEPSEEK_MODEL || DEFAULT_MODEL;
+}
 
 function safeParse(jsonString) {
   try {
     return JSON.parse(jsonString);
   } catch (e) {
-    console.error("JSON parse failed:", jsonString);
+    console.error('JSON parse failed:', jsonString);
 
-    // 🔥 emergency repair attempt
     try {
-      const start = jsonString.indexOf("{");
-      const end = jsonString.lastIndexOf("}");
+      const start = jsonString.indexOf('{');
+      const end = jsonString.lastIndexOf('}');
       return JSON.parse(jsonString.slice(start, end + 1));
     } catch (err) {
       return {
-        summary: "",
-        skills: "",
+        summary: '',
+        skills: '',
         experience: [],
         education: [],
         certifications: []
@@ -28,8 +44,27 @@ function safeParse(jsonString) {
   }
 }
 
+async function chatJson({ model, messages, temperature = 0.7, max_tokens = 2000 }) {
+  const client = getClient();
+  const response = await client.chat.completions.create({
+    model,
+    messages,
+    temperature,
+    max_tokens,
+    response_format: { type: 'json_object' },
+    thinking: { type: 'disabled' }
+  });
+
+  const content = response.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('Empty model response');
+  }
+
+  return safeParse(content);
+}
+
 async function generateCVContent(userProfile, jobDescription) {
-  const { user, employmentHistory, education, certifications, additionalInfo } = userProfile;
+  const { user, employmentHistory, education, certifications, additionalInfo, skills } = userProfile;
 
   const systemPrompt = `You are a professional resume/CV writer specialized in ATS-optimized resumes for technical roles.
 CRITICAL GUIDELINES:
@@ -101,7 +136,7 @@ Output JSON:
   "certifications": ["Certification Name (Issuer, Date)"]
 }`;
 
- const userPrompt = `Generate a tailored resume for the following candidate applying to this job:
+  const userPrompt = `Generate a tailored resume for the following candidate applying to this job:
 
 ## CANDIDATE PROFILE
 
@@ -148,6 +183,11 @@ ${education.map(edu => `
   ${edu.gpa ? `GPA: ${edu.gpa}` : ''}
 `).join('\n')}
 
+### Skills
+${(skills || []).length
+  ? skills.map(skill => `- ${skill.skill_name}${skill.proficiency_level ? ` (${skill.proficiency_level})` : ''}`).join('\n')
+  : 'None provided — infer only from employment history and the job description. Do not invent tools the candidate never used.'}
+
 ### Certifications
 ${certifications.map(cert => `- ${cert.name}${cert.issuer ? ` (${cert.issuer})` : ''}${cert.date_obtained ? ` - ${cert.date_obtained}` : ''}${cert.credly_link ? ` [Verified: ${cert.credly_link}]` : ''}`).join('\n')}
 
@@ -177,25 +217,22 @@ Guidelines:
 `;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    return await chatJson({
+      model: getModel(),
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.7,
-      max_tokens: 4000,
-      response_format: { type: 'json_object' }
+      max_tokens: 4000
     });
-
-    const content = response.choices[0].message.content;
-    return safeParse(content);
   } catch (error) {
-    console.error('OpenAI API error:', error);
-    throw new Error('Failed to generate CV content');
+    console.error('DeepSeek CV generation error:', error);
+    throw new Error(error.message === 'DEEPSEEK_API_KEY is not configured'
+      ? error.message
+      : 'Failed to generate CV content');
   }
 }
-
 
 async function generateCoverLetter(userProfile, jobDescription, jobTitle, companyName) {
   const { user, employmentHistory, education, certifications } = userProfile;
@@ -248,21 +285,20 @@ ${jobDescription}
 Write a compelling, personalized cover letter that connects the candidate's experience to this specific job. Make it genuine and avoid generic phrases.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-5.5',
+    return await chatJson({
+      model: getModel(),
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      max_completion_tokens: 1500,
-      response_format: { type: 'json_object' }
+      temperature: 0.7,
+      max_tokens: 1500
     });
-
-    const content = response.choices[0].message.content;
-    return safeParse(content);
   } catch (error) {
-    console.error('Cover letter generation error:', error);
-    throw new Error('Failed to generate cover letter');
+    console.error('DeepSeek cover letter generation error:', error);
+    throw new Error(error.message === 'DEEPSEEK_API_KEY is not configured'
+      ? error.message
+      : 'Failed to generate cover letter');
   }
 }
 
@@ -270,20 +306,17 @@ async function extractJobDetails(jdContent) {
   const systemPrompt = `Extract the job title and company name from the following job description. Return as JSON: {"jobTitle": "...", "companyName": "..."}. If not found, use "Not specified".`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    return await chatJson({
+      model: getModel('fast'),
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: jdContent.substring(0, 2000) }
       ],
       temperature: 0,
-      max_tokens: 100,
-      response_format: { type: 'json_object' }
+      max_tokens: 100
     });
-
-    return safeParse(response.choices[0].message.content);
   } catch (error) {
-    console.error('Job details extraction error:', error);
+    console.error('DeepSeek job details extraction error:', error);
     return { jobTitle: 'Not specified', companyName: 'Not specified' };
   }
 }

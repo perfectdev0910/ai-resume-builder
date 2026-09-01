@@ -54,13 +54,27 @@ async function authMiddleware(req, res, next) {
     const decoded = verifyToken(token);
 
     const user = await getOneCompat(
-      'SELECT id, email, full_name, role FROM users WHERE id = ?',
-      'SELECT id, email, full_name, role FROM users WHERE id = $1',
+      'SELECT id, email, full_name, role, status FROM users WHERE id = ?',
+      'SELECT id, email, full_name, role, status FROM users WHERE id = $1',
       [decoded.id]
     );
 
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
+    }
+
+    if (user.status === 'pending') {
+      return res.status(403).json({
+        error: 'Your account is pending admin approval.',
+        status: 'pending'
+      });
+    }
+
+    if (user.status === 'rejected') {
+      return res.status(403).json({
+        error: 'Your account has been rejected. Please contact administrator.',
+        status: 'rejected'
+      });
     }
 
     req.user = user;

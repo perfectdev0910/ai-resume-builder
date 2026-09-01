@@ -41,6 +41,7 @@ export default function Register() {
     timezone: ''
   });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -62,6 +63,7 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
@@ -77,8 +79,12 @@ export default function Register() {
 
     try {
       const { confirmPassword, ...data } = formData;
-      await register(data);
-      navigate('/profile');
+      const result = await register(data);
+      if (result?.requiresApproval || !result?.token) {
+        setSuccess(result?.message || 'Registration successful. Your account is pending admin approval.');
+        return;
+      }
+      navigate('/login');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');
     } finally {
@@ -101,14 +107,24 @@ export default function Register() {
             <p className="text-gray-500 mt-1">Start building AI-powered resumes</p>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
               {error}
             </div>
           )}
 
-          {/* Form */}
+          {success && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+              <p>{success}</p>
+              <p className="mt-2">
+                <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
+                  Go to sign in
+                </Link>
+              </p>
+            </div>
+          )}
+
+          {!success && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -247,10 +263,13 @@ export default function Register() {
               {loading ? 'Creating account...' : 'Create account'}
             </button>
           </form>
+          )}
 
+          {!success && (
           <p className="mt-4 text-center text-xs text-gray-500">
             You can add employment history, education, and certifications after registration.
           </p>
+          )}
 
           {/* Footer */}
           <p className="mt-6 text-center text-sm text-gray-500">

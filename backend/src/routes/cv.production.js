@@ -6,6 +6,7 @@
 const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const { generateCVContent, generateCoverLetter, extractJobDetails } = require('../services/openai');
+const { prettyCompanyName } = require('../utils/companyName');
 
 // Choose database and CV generator based on environment
 const db = process.env.DATABASE_URL 
@@ -23,18 +24,63 @@ const storage = process.env.STORAGE_PROVIDER
 
 const router = express.Router();
 
+function storedFileValue(result) {
+  if (!result) return null;
+  return result.url || result.filename || null;
+}
+
+function publicFileUrl(result) {
+  if (!result) return null;
+  if (result.url) return result.url;
+  if (result.filename) return `/uploads/${result.filename}`;
+  return null;
+}
+
+function resolveStoredFile(application, ...keys) {
+  for (const key of keys) {
+    const stored = application?.[key];
+    if (!stored) continue;
+    if (/^https?:\/\//i.test(stored)) return stored;
+    return `/uploads/${stored.split('/').pop()}`;
+  }
+  return null;
+}
+
 router.post('/generate', authMiddleware, async (req, res) => {
   try {
     console.log('STORAGE_PROVIDER:', process.env.STORAGE_PROVIDER);
     console.log('Using cloud generator:', !!process.env.STORAGE_PROVIDER);
 
-    const { jobDescription, jdLink, jobTitle: providedJobTitle, companyName: providedCompanyName } = req.body;
+    const { jobDescription, jdLink, jobTitle: providedJobTitle, companyName: rawCompanyName, force } = req.body;
+    const providedCompanyName = prettyCompanyName(rawCompanyName);
 
     if (!jobDescription) {
       return res.status(400).json({ error: 'Job description is required' });
     }
 
     const paramPlaceholder = process.env.DATABASE_URL ? '$1' : '?';
+
+    if (!force && providedCompanyName) {
+      const duplicate = await db.getOne(
+        process.env.DATABASE_URL
+          ? `SELECT COUNT(*)::int as count FROM applications
+             WHERE user_id = $1
+             AND LOWER(company_name) = LOWER($2)
+             AND applied_at >= NOW() - INTERVAL '30 days'`
+          : `SELECT COUNT(*) as count FROM applications
+             WHERE user_id = ?
+             AND LOWER(company_name) = LOWER(?)
+             AND applied_at >= DATE('now', '-30 days')`,
+        [req.user.id, providedCompanyName]
+      );
+
+      if (Number(duplicate?.count) > 0) {
+        return res.status(409).json({
+          error: 'You have already applied to this company in the last 30 days.',
+          isDuplicate: true
+        });
+      }
+    }
 
     // ✅ Get user
     const user = await db.getOne(
@@ -79,6 +125,11 @@ router.post('/generate', authMiddleware, async (req, res) => {
       [req.user.id]
     );
 
+    const skills = await db.getAll(
+      `SELECT * FROM skills WHERE user_id = ${paramPlaceholder}`,
+      [req.user.id]
+    );
+
     const tags = await db.getAll(
       `SELECT * FROM user_tags WHERE user_id = ${paramPlaceholder}`,
       [req.user.id]
@@ -89,6 +140,7 @@ router.post('/generate', authMiddleware, async (req, res) => {
       employmentHistory,
       education,
       certifications,
+      skills,
       additionalInfo,
       tags
     };
@@ -108,11 +160,41 @@ router.post('/generate', authMiddleware, async (req, res) => {
         : extractedDetails.companyName;
     }
 
-    // ✅ Generate content
-    const [cvContent, coverLetterContent] = await Promise.all([
+    if (typeof jobTitle === 'string') jobTitle = jobTitle.trim();
+    companyName = prettyCompanyName(companyName);
+
+    if (companyName) {
+      const existingCompany = await db.getOne(
+        process.env.DATABASE_URL
+          ? `SELECT company_name FROM applications
+             WHERE user_id = $1 AND LOWER(company_name) = LOWER($2)
+             ORDER BY applied_at DESC LIMIT 1`
+          : `SELECT company_name FROM applications
+             WHERE user_id = ? AND LOWER(company_name) = LOWER(?)
+             ORDER BY applied_at DESC LIMIT 1`,
+        [req.user.id, companyName]
+      );
+      if (existingCompany?.company_name) {
+        companyName = existingCompany.company_name;
+      }
+    }
+
+    const [cvOutcome, coverOutcome] = await Promise.allSettled([
       generateCVContent(userProfile, jobDescription),
       generateCoverLetter(userProfile, jobDescription, jobTitle, companyName)
     ]);
+
+    if (cvOutcome.status === 'rejected') {
+      throw cvOutcome.reason instanceof Error
+        ? cvOutcome.reason
+        : new Error('Failed to generate CV content');
+    }
+
+    const cvContent = cvOutcome.value;
+    const coverLetterContent = coverOutcome.status === 'fulfilled' ? coverOutcome.value : null;
+    const coverLetterWarning = coverOutcome.status === 'rejected'
+      ? (coverOutcome.reason?.message || 'Cover letter generation failed')
+      : null;
 
     const resumeFilename = `${user.full_name}_Resume`;
     const coverLetterFilename = `${user.full_name}_Cover Letter`;
@@ -122,13 +204,19 @@ router.post('/generate', authMiddleware, async (req, res) => {
       tags: tags.map(t => t.tag)
     };
 
-    // ✅ Generate files
-    const [docxResult, pdfResult, coverLetterDocxResult, coverLetterPdfResult] = await Promise.all([
+    const [docxResult, pdfResult] = await Promise.all([
       cvGenerator.generateDocx(cvContent, user, resumeFilename, docOptions),
-      cvGenerator.generatePdf(cvContent, user, resumeFilename, docOptions),
-      cvGenerator.generateCoverLetterDocx(coverLetterContent, user, coverLetterFilename),
-      cvGenerator.generateCoverLetterPdf(coverLetterContent, user, coverLetterFilename)
+      cvGenerator.generatePdf(cvContent, user, resumeFilename, docOptions)
     ]);
+
+    let coverLetterDocxResult = null;
+    let coverLetterPdfResult = null;
+    if (coverLetterContent) {
+      [coverLetterDocxResult, coverLetterPdfResult] = await Promise.all([
+        cvGenerator.generateCoverLetterDocx(coverLetterContent, user, coverLetterFilename),
+        cvGenerator.generateCoverLetterPdf(coverLetterContent, user, coverLetterFilename)
+      ]);
+    }
 
     console.log('PDF RESULT:', pdfResult);
 
@@ -151,10 +239,10 @@ router.post('/generate', authMiddleware, async (req, res) => {
           companyName,
           jdLink || '',
           jobDescription,
-          docxResult.url,
-          pdfResult.url,
-          coverLetterDocxResult.url,
-          coverLetterPdfResult.url
+          storedFileValue(docxResult),
+          storedFileValue(pdfResult),
+          storedFileValue(coverLetterDocxResult),
+          storedFileValue(coverLetterPdfResult)
         ]
       );
     } else {
@@ -167,10 +255,10 @@ router.post('/generate', authMiddleware, async (req, res) => {
           companyName,
           jdLink || '',
           jobDescription,
-          docxResult.url,
-          pdfResult.url,
-          coverLetterDocxResult.url,
-          coverLetterPdfResult.url
+          storedFileValue(docxResult),
+          storedFileValue(pdfResult),
+          storedFileValue(coverLetterDocxResult),
+          storedFileValue(coverLetterPdfResult)
         ]
       );
     }
@@ -199,14 +287,16 @@ router.post('/generate', authMiddleware, async (req, res) => {
       throw new Error('Application not found after insert');
     }
 
-    // ✅ Build URLs
-    const cvDocUrl = docxResult.url;
-    const cvPdfUrl = pdfResult.url;
-    const coverLetterDocUrl = coverLetterDocxResult.url;
-    const coverLetterPdfUrl = coverLetterPdfResult.url;
+    const cvDocUrl = publicFileUrl(docxResult);
+    const cvPdfUrl = publicFileUrl(pdfResult);
+    const coverLetterDocUrl = publicFileUrl(coverLetterDocxResult);
+    const coverLetterPdfUrl = publicFileUrl(coverLetterPdfResult);
 
     return res.json({
-      message: 'Resume and Cover Letter generated successfully',
+      message: coverLetterWarning
+        ? 'Resume generated successfully. Cover letter could not be generated.'
+        : 'Resume and Cover Letter generated successfully',
+      warning: coverLetterWarning,
       application: {
         id: application.id,
         jobTitle: application.job_title,
@@ -362,7 +452,11 @@ router.get('/download/docx/:applicationId', authMiddleware, async (req, res) => 
       return res.redirect(url);
     }
 
-    // For local storage, serve the file
+    const fileUrl = resolveStoredFile(application, 'cv_doc_url', 'cv_doc_path');
+    if (!fileUrl) {
+      return res.status(404).json({ error: 'Resume file not found' });
+    }
+
     const user = await db.getOne(
       `SELECT full_name FROM users WHERE id = ${paramPlaceholder}`, 
       [req.user.id]
@@ -370,7 +464,7 @@ router.get('/download/docx/:applicationId', authMiddleware, async (req, res) => 
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Resume.docx`;
     
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cv_doc_path}`);
+    res.redirect(fileUrl);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -407,8 +501,13 @@ router.get('/download/pdf/:applicationId', authMiddleware, async (req, res) => {
     );
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Resume.pdf`;
     
+    const fileUrl = resolveStoredFile(application, 'cv_pdf_url', 'cv_pdf_path');
+    if (!fileUrl) {
+      return res.status(404).json({ error: 'Resume file not found' });
+    }
+
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cv_pdf_url}`);
+    res.redirect(fileUrl);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -444,8 +543,13 @@ router.get('/download/cover-letter/docx/:applicationId', authMiddleware, async (
       [req.user.id]
     );
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Cover_Letter.docx`;
-    
+    const fileUrl = resolveStoredFile(application, 'cover_letter_doc_url', 'cover_letter_doc_path');
+    if (!fileUrl) {
+      return res.status(404).json({ error: 'Cover letter not found' });
+    }
+
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+    res.redirect(fileUrl);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -482,8 +586,13 @@ router.get('/download/cover-letter/pdf/:applicationId', authMiddleware, async (r
     );
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Cover_Letter.pdf`;
     
+    const fileUrl = resolveStoredFile(application, 'cover_letter_pdf_url', 'cover_letter_pdf_path');
+    if (!fileUrl) {
+      return res.status(404).json({ error: 'Cover letter not found' });
+    }
+
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(`/uploads/${application.cover_letter_pdf_url}`);
+    res.redirect(fileUrl);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });

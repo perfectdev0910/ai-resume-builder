@@ -1,6 +1,6 @@
 # AI Resume Builder
 
-An AI-powered resume/CV builder Chrome extension with a full-stack dashboard. Generate tailored, ATS-friendly resumes from job descriptions using OpenAI GPT.
+An AI-powered resume/CV builder Chrome extension with a full-stack dashboard. Generate tailored, ATS-friendly resumes from job descriptions using DeepSeek.
 
 ## Features
 
@@ -37,7 +37,7 @@ An AI-powered resume/CV builder Chrome extension with a full-stack dashboard. Ge
 
 ### Backend API
 - JWT-based authentication
-- OpenAI GPT-4 integration for CV content generation
+- DeepSeek integration for CV content generation
 - DOCX and PDF generation
 - SQLite database for data persistence
 - Cloud storage for generated CVs
@@ -49,7 +49,7 @@ ai-resume-builder/
 ├── backend/                 # Express.js API server
 │   ├── src/
 │   │   ├── routes/         # API routes
-│   │   ├── services/       # Business logic (OpenAI, CV generation)
+│   │   ├── services/       # Business logic (DeepSeek, CV generation)
 │   │   ├── models/         # Database models
 │   │   └── middleware/     # Auth middleware
 │   └── package.json
@@ -72,7 +72,7 @@ ai-resume-builder/
 ### Prerequisites
 - Node.js 18+
 - npm or yarn
-- OpenAI API key
+- DeepSeek API key
 
 ### 1. Backend Setup
 
@@ -85,8 +85,8 @@ npm install
 # Create .env file
 cp .env.example .env
 
-# Edit .env and add your OpenAI API key
-# OPENAI_API_KEY=your-key-here
+# Edit .env and add your DeepSeek API key
+# DEEPSEEK_API_KEY=your-key-here
 
 # Start the server
 npm run dev
@@ -178,7 +178,7 @@ For best results, complete your profile with:
 
 ## Tech Stack
 
-- **Backend**: Node.js, Express.js, SQLite3, OpenAI SDK
+- **Backend**: Node.js, Express.js, SQLite3, DeepSeek (OpenAI-compatible SDK)
 - **Frontend**: React 18, Vite, TailwindCSS, Chart.js
 - **Extension**: Chrome Manifest V3, Service Workers
 - **Document Generation**: docx, pdf-lib
@@ -190,7 +190,9 @@ For best results, complete your profile with:
 PORT=3000
 NODE_ENV=development
 JWT_SECRET=your-secret-key
-OPENAI_API_KEY=your-openai-api-key
+DEEPSEEK_API_KEY=your-deepseek-api-key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
 DATABASE_PATH=./data/resume_builder.db
 STORAGE_PATH=./uploads
 FRONTEND_URL=http://localhost:5173

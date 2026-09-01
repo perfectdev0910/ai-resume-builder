@@ -1,9 +1,21 @@
-import { useState } from 'react';
-import { cvAPI, applicationsAPI } from '../utils/api';
+import { useRef, useState } from 'react';
+import { cvAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 
 // Helper to sanitize filename
 const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
+const trimCompanyName = (name) => String(name || '').trim();
+const prettyCompanyName = (name) => {
+  const trimmed = trimCompanyName(name);
+  if (!trimmed) return '';
+  if (trimmed !== trimmed.toLowerCase() && trimmed !== trimmed.toUpperCase()) {
+    return trimmed;
+  }
+  return trimmed.replace(/\S+/g, (word) => {
+    if (word.length <= 4 && word === word.toUpperCase()) return word;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+};
 
 export default function Generate() {
   const { user } = useAuth();
@@ -15,48 +27,48 @@ export default function Generate() {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-
-  const checkDuplicate = async () => {
-    if (!companyName.trim()) return false;
-    try {
-      const response = await applicationsAPI.checkDuplicate(companyName);
-      return response.data.isDuplicate;
-    } catch {
-      return false;
-    }
-  };
+  const generatingRef = useRef(false);
 
   const handleGenerate = async (skipDuplicateCheck = false) => {
+    const force = skipDuplicateCheck === true;
+
+    if (generatingRef.current) return;
+
     if (!jobDescription.trim()) {
       setError('Please enter a job description');
       return;
     }
 
-    if (!companyName.trim()) {
+    const normalizedCompany = prettyCompanyName(companyName);
+    if (!normalizedCompany) {
       setError('Company name is required');
       return;
     }
 
-    // Check for duplicate application
-    if (!skipDuplicateCheck && companyName.trim()) {
-      const isDuplicate = await checkDuplicate();
-      if (isDuplicate) {
-        setShowDuplicateModal(true);
-        return;
-      }
+    if (normalizedCompany !== companyName) {
+      setCompanyName(normalizedCompany);
     }
 
+    generatingRef.current = true;
     setLoading(true);
     setError('');
     setResult(null);
     setShowDuplicateModal(false);
 
     try {
-      const response = await cvAPI.generate(jobDescription, jdLink, companyName);
+      const response = await cvAPI.generate(jobDescription, jdLink, normalizedCompany, { force });
       setResult(response.data);
+      if (response.data?.warning) {
+        setError(response.data.warning);
+      }
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to generate documents. Please try again.');
+      if (err.response?.status === 409 && err.response?.data?.isDuplicate) {
+        setShowDuplicateModal(true);
+      } else {
+        setError(err.response?.data?.error || 'Failed to generate documents. Please try again.');
+      }
     } finally {
+      generatingRef.current = false;
       setLoading(false);
     }
   };
@@ -92,29 +104,64 @@ export default function Generate() {
   
   const fullName = sanitizeFilename(user?.full_name || 'User');
 
-  const handleDownload = async (url, filename) => {
-  try {
-    if (!url) return;
+  const handleDownload = async (kind, fileType) => {
+    try {
+      const applicationId = result?.application?.id;
+      if (!applicationId) {
+        setError('Missing application ID');
+        return;
+      }
 
-    const response = await fetch(url);
-    const blob = await response.blob();
+      let url;
+      if (kind === 'resume') {
+        url = fileType === 'docx'
+          ? cvAPI.downloadDocUrl(applicationId)
+          : cvAPI.downloadPdfUrl(applicationId);
+      } else {
+        url = fileType === 'docx'
+          ? cvAPI.downloadCoverLetterDocUrl(applicationId)
+          : cvAPI.downloadCoverLetterPdfUrl(applicationId);
+      }
 
-    const blobUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-    link.href = blobUrl;
-    link.download = filename;
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
 
-    document.body.appendChild(link);
-    link.click();
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const prefix = kind === 'resume' ? 'Resume' : 'Cover_Letter';
+      link.href = blobUrl;
+      link.download = `${fullName}_${prefix}.${fileType}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Download failed:', err);
+      setError('Failed to download file');
+    }
+  };
 
-    link.remove();
-    window.URL.revokeObjectURL(blobUrl);
-  } catch (err) {
-    console.error('Download failed:', err);
-    setError('Failed to download file');
-  }
-};
+  const previewSkillLines = (skills) => {
+    if (!skills) return [];
+    if (Array.isArray(skills)) return skills.filter(Boolean);
+    if (typeof skills === 'string') {
+      return skills.split('\n').map((line) => line.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  const previewExperienceBullets = (exp) => [
+    ...(Array.isArray(exp.responsibilities) ? exp.responsibilities : []),
+    ...(Array.isArray(exp.keyAchievements) ? exp.keyAchievements : []),
+    ...(Array.isArray(exp.achievements) ? exp.achievements : [])
+  ];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -130,7 +177,7 @@ export default function Generate() {
           <div className="bg-white rounded-lg p-6 max-w-md mx-4">
             <h3 className="text-lg font-semibold text-yellow-800 mb-2">⚠️ Duplicate Application</h3>
             <p className="text-gray-600 mb-4">
-              You have already applied to <strong>{companyName}</strong> in the last 30 days. Are you sure you want to proceed?
+              You have already applied to <strong>{prettyCompanyName(companyName)}</strong> in the last 30 days. Are you sure you want to proceed?
             </p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowDuplicateModal(false)} className="btn btn-secondary">
@@ -165,24 +212,14 @@ export default function Generate() {
                 <div className="flex gap-3">
 
                   <button
-                    onClick={() =>
-                      handleDownload(
-                        result.application?.cvDocUrl,
-                        `${fullName}_Resume.docx`
-                      )
-                    }
+                    onClick={() => handleDownload('resume', 'docx')}
                     className="btn bg-green-600 text-white hover:bg-green-700"
                   >
                     DOCX
                   </button>
 
                   <button
-                    onClick={() =>
-                      handleDownload(
-                        result.application?.cvPdfUrl,
-                        `${fullName}_Resume.pdf`
-                      )
-                    }
+                    onClick={() => handleDownload('resume', 'pdf')}
                     className="btn bg-white text-green-700 border border-green-300 hover:bg-green-50"
                   >
                     PDF
@@ -191,37 +228,29 @@ export default function Generate() {
                 </div>
               </div>
               
-              {/* Cover Letter Downloads */}
-              <div className="mt-4">
-                <h4 className="text-sm font-semibold text-green-800 mb-2">Cover Letter</h4>
-                <div className="flex gap-3">
-
-                  <button
-                    onClick={() =>
-                      handleDownload(
-                        result.application?.coverLetterDocUrl,
-                        `${fullName}_Cover_Letter.docx`
-                      )
-                    }
-                    className="btn bg-green-600 text-white hover:bg-green-700"
-                  >
-                    DOCX
-                  </button>
-
-                  <button
-                    onClick={() =>
-                      handleDownload(
-                        result.application?.coverLetterPdfUrl,
-                        `${fullName}_Cover_Letter.pdf`
-                      )
-                    }
-                    className="btn bg-white text-green-700 border border-green-300 hover:bg-green-50"
-                  >
-                    PDF
-                  </button>
-
+              {(result.application?.coverLetterDocUrl || result.application?.coverLetterPdfUrl) && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold text-green-800 mb-2">Cover Letter</h4>
+                  <div className="flex gap-3">
+                    {result.application?.coverLetterDocUrl && (
+                      <button
+                        onClick={() => handleDownload('cover', 'docx')}
+                        className="btn bg-green-600 text-white hover:bg-green-700"
+                      >
+                        DOCX
+                      </button>
+                    )}
+                    {result.application?.coverLetterPdfUrl && (
+                      <button
+                        onClick={() => handleDownload('cover', 'pdf')}
+                        className="btn bg-white text-green-700 border border-green-300 hover:bg-green-50"
+                      >
+                        PDF
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               
               <button onClick={handleReset} className="btn btn-secondary mt-4">
                 Generate Another
@@ -272,6 +301,13 @@ Include:
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
+                onBlur={() => setCompanyName((name) => prettyCompanyName(name))}
+                onPaste={(e) => {
+                  const pasted = e.clipboardData.getData('text');
+                  if (!pasted) return;
+                  e.preventDefault();
+                  setCompanyName(prettyCompanyName(pasted));
+                }}
                 className="input"
                 placeholder="e.g., Google, Microsoft"
                 disabled={loading}
@@ -294,7 +330,8 @@ Include:
 
           <div className="flex gap-3 pt-2">
             <button
-              onClick={() => handleGenerate()}
+              type="button"
+              onClick={() => handleGenerate(false)}
               disabled={loading || !jobDescription.trim()}
               className="btn btn-primary px-6"
             >
@@ -313,6 +350,7 @@ Include:
               )}
             </button>
             <button
+              type="button"
               onClick={handlePreview}
               disabled={loading || !jobDescription.trim()}
               className="btn btn-secondary"
@@ -344,21 +382,17 @@ Include:
               </div>
             )}
 
-            {/* Skills */}
-            {preview.skills?.length > 0 && (
+            {previewSkillLines(preview.skills).length > 0 && (
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Skills</h3>
-                <div className="flex flex-wrap gap-2">
-                  {preview.skills.map((skill, idx) => (
-                    <span key={idx} className="px-3 py-1 bg-primary-50 text-primary-700 rounded-full text-sm">
-                      {skill}
-                    </span>
+                <div className="space-y-2">
+                  {previewSkillLines(preview.skills).map((skill, idx) => (
+                    <p key={idx} className="text-gray-700 text-sm">{skill}</p>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Experience */}
             {preview.experience?.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Experience</h3>
@@ -371,9 +405,12 @@ Include:
                       </div>
                       <span className="text-sm text-gray-500">{exp.period}</span>
                     </div>
-                    {exp.achievements?.length > 0 && (
+                    {exp.summary && (
+                      <p className="mt-1 text-sm text-gray-600 italic">{exp.summary}</p>
+                    )}
+                    {previewExperienceBullets(exp).length > 0 && (
                       <ul className="mt-2 space-y-1 text-gray-700">
-                        {exp.achievements.map((ach, i) => (
+                        {previewExperienceBullets(exp).map((ach, i) => (
                           <li key={i} className="flex items-start gap-2">
                             <span className="text-primary-500 mt-1">•</span>
                             {ach}
@@ -416,7 +453,12 @@ Include:
             <p className="text-sm text-gray-500 mb-4">
               Happy with this content? Click "Generate CV" to create downloadable documents.
             </p>
-            <button onClick={handleGenerate} disabled={loading} className="btn btn-primary">
+            <button
+              type="button"
+              onClick={() => handleGenerate(false)}
+              disabled={loading}
+              className="btn btn-primary"
+            >
               {loading ? 'Generating...' : 'Generate CV Documents'}
             </button>
           </div>

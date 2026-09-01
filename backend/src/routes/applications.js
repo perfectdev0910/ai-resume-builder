@@ -8,6 +8,7 @@ const db = isPostgres
   : require('../models/database');
 
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { prettyCompanyName } = require('../utils/companyName');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
@@ -98,7 +99,7 @@ async function deleteFileIfExists(filename) {
 // Check for duplicate application (same company in 30 days)
 router.get('/check-duplicate', authMiddleware, async (req, res) => {
   try {
-    const { companyName } = req.query;
+    const companyName = prettyCompanyName(req.query.companyName);
 
     if (!companyName) {
       return res.json({ isDuplicate: false });

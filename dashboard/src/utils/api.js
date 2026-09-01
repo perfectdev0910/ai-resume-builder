@@ -87,8 +87,13 @@ export const usersAPI = {
 
 // CV API
 export const cvAPI = {
-  generate: (jobDescription, jdLink, companyName) => 
-    api.post('/cv/generate', { jobDescription, jdLink, companyName }),
+  generate: (jobDescription, jdLink, companyName, options = {}) =>
+    api.post('/cv/generate', {
+      jobDescription,
+      jdLink,
+      companyName,
+      force: options.force === true
+    }),
   preview: (jobDescription) => 
     api.post('/cv/preview', { jobDescription }),
   downloadDocUrl: (applicationId) => {

@@ -6,7 +6,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     // Set default configuration
     chrome.storage.local.set({
       config: {
-        apiUrl: 'https://ai-resume-builder-api-8aj2.onrender.com/',
+        apiUrl: 'https://ai-resume-builder-api-8aj2.onrender.com',
         dashboardUrl: 'https://ai-resume-builder-rtl9.vercel.app/'
       }
     });

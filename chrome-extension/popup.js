@@ -1,12 +1,46 @@
 // Default configuration
 const DEFAULT_CONFIG = {
-  apiUrl: 'https://ai-resume-builder-api-8aj2.onrender.com/api',
+  apiUrl: 'https://ai-resume-builder-api-8aj2.onrender.com',
   dashboardUrl: 'https://ai-resume-builder-rtl9.vercel.app/'
 };
+
+function getApiBase() {
+  const raw = String(config.apiUrl || DEFAULT_CONFIG.apiUrl).replace(/\/+$/, '');
+  return raw.endsWith('/api') ? raw : `${raw}/api`;
+}
+
+function getServerOrigin() {
+  return getApiBase().replace(/\/api$/, '');
+}
+
+function apiPath(path) {
+  const suffix = path.startsWith('/') ? path : `/${path}`;
+  return `${getApiBase()}${suffix}`;
+}
+
+function resolveFileUrl(pathOrUrl) {
+  if (!pathOrUrl) return '';
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const origin = getServerOrigin();
+  if (pathOrUrl.startsWith('/')) return `${origin}${pathOrUrl}`;
+  return `${origin}/uploads/${pathOrUrl}`;
+}
 
 // Helper to sanitize filename
 function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
+}
+
+function prettyCompanyName(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return '';
+  if (trimmed !== trimmed.toLowerCase() && trimmed !== trimmed.toUpperCase()) {
+    return trimmed;
+  }
+  return trimmed.replace(/\S+/g, (word) => {
+    if (word.length <= 4 && word === word.toUpperCase()) return word;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
 }
 
 // State
@@ -81,7 +115,7 @@ async function clearAuth() {
 async function checkAuth() {
   if (authToken && currentUser) {
     try {
-      const response = await fetch(`${config.apiUrl}/api/auth/me`, {
+      const response = await fetch(apiPath('/auth/me'), {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       if (response.ok) {
@@ -209,6 +243,22 @@ function setupEventListeners() {
   document.getElementById('manualCompanyName')?.addEventListener('input', (e) => {
     currentCompanyName = e.target.value;
   });
+  ['scrapedCompanyName', 'manualCompanyName'].forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener('blur', () => {
+      const normalized = prettyCompanyName(input.value);
+      if (normalized !== input.value) input.value = normalized;
+      currentCompanyName = normalized;
+    });
+    input.addEventListener('paste', (e) => {
+      const pasted = e.clipboardData?.getData('text');
+      if (!pasted) return;
+      e.preventDefault();
+      input.value = prettyCompanyName(pasted);
+      currentCompanyName = input.value;
+    });
+  });
 }
 
 // Handle login
@@ -218,7 +268,7 @@ async function handleLogin(e) {
   const password = document.getElementById('loginPassword').value;
 
   try {
-    const response = await fetch(`${config.apiUrl}/api/auth/login`, {
+    const response = await fetch(apiPath('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -242,7 +292,7 @@ async function handleRegister(e) {
   const full_name = document.getElementById('regName').value;
 
   try {
-    const response = await fetch(`${config.apiUrl}/api/auth/register`, {
+    const response = await fetch(apiPath('/auth/register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, full_name })
@@ -251,9 +301,14 @@ async function handleRegister(e) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Registration failed');
 
+    if (data.requiresApproval || !data.token) {
+      alert(data.message || 'Registration successful. Your account is pending admin approval.');
+      document.querySelector('.tab[data-tab="login"]')?.click();
+      return;
+    }
+
     await saveAuth(data.token, data.user);
     showMainView();
-    alert('Registration successful! Please complete your profile in the dashboard for best results.');
     chrome.tabs.create({ url: `${config.dashboardUrl}/profile` });
   } catch (error) {
     alert(error.message);
@@ -298,12 +353,12 @@ async function handleScrape() {
       const { jobDescription, jobTitle, companyName, url } = results[0].result;
       currentJd = jobDescription;
       currentJobTitle = jobTitle;
-      currentCompanyName = companyName;
+      currentCompanyName = prettyCompanyName(companyName);
       currentJdLink = url || tab.url;
 
       document.getElementById('scrapedInfo').classList.remove('hidden');
       document.getElementById('scrapedJobTitle').value = jobTitle || '';
-      document.getElementById('scrapedCompanyName').value = companyName || '';
+      document.getElementById('scrapedCompanyName').value = currentCompanyName || '';
       document.getElementById('scrapedJobLink').value = currentJdLink || '';
       document.getElementById('jdContent').value = jobDescription;
 
@@ -448,28 +503,14 @@ function updateGenerateButton() {
   const jdContent = document.getElementById('jdContent')?.value || '';
   const manualJd = document.getElementById('manualJd')?.value || '';
   
-  btn.disabled = !(currentJd || jdContent || manualJd);
-}
-
-// Check for duplicate applications
-async function checkDuplicateApplication(companyName) {
-  try {
-    const response = await fetch(`${config.apiUrl}/api/applications/check-duplicate?companyName=${encodeURIComponent(companyName)}`, {
-      headers: { 'Authorization': `Bearer ${authToken}` }
-    });
-    const data = await response.json();
-    return data.isDuplicate;
-  } catch (error) {
-    console.error('Duplicate check error:', error);
-    return false;
-  }
+  btn.disabled = btn.dataset.generating === 'true' || !(currentJd || jdContent || manualJd);
 }
 
 // Show duplicate warning modal
 function showDuplicateModal(companyName, callback) {
   const modal = document.getElementById('duplicateModal');
   document.getElementById('duplicateMessage').textContent = 
-    `You have already applied to "${companyName}" in the last 2 weeks. Are you sure you want to proceed?`;
+    `You have already applied to "${companyName}" in the last 30 days. Are you sure you want to proceed?`;
   modal.classList.remove('hidden');
   pendingGenerateCallback = callback;
 }
@@ -493,9 +534,12 @@ async function handleGenerate(skipDuplicateCheck = false) {
                     document.getElementById('manualJd')?.value || 
                     currentJd;
   
-  const companyName = document.getElementById('scrapedCompanyName')?.value || 
-                      document.getElementById('manualCompanyName')?.value || 
-                      currentCompanyName || '';
+  const companyName = prettyCompanyName(
+    document.getElementById('scrapedCompanyName')?.value ||
+    document.getElementById('manualCompanyName')?.value ||
+    currentCompanyName ||
+    ''
+  );
 
   const jobTitle = document.getElementById('scrapedJobTitle')?.value || currentJobTitle || '';
   const jdLink = document.getElementById('scrapedJobLink')?.value || 
@@ -507,16 +551,10 @@ async function handleGenerate(skipDuplicateCheck = false) {
     return;
   }
 
-  // Check for duplicate application
-  if (!skipDuplicateCheck && companyName) {
-    const isDuplicate = await checkDuplicateApplication(companyName);
-    if (isDuplicate) {
-      showDuplicateModal(companyName, () => handleGenerate(true));
-      return;
-    }
-  }
+  if (btn.dataset.generating === 'true') return;
 
   // Show loading
+  btn.dataset.generating = 'true';
   btn.disabled = true;
   statusSection.classList.remove('hidden');
   loadingIndicator.classList.remove('hidden');
@@ -524,7 +562,7 @@ async function handleGenerate(skipDuplicateCheck = false) {
   errorSection.classList.add('hidden');
 
   try {
-    const response = await fetch(`${config.apiUrl}/api/cv/generate`, {
+    const response = await fetch(apiPath('/cv/generate'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -534,11 +572,18 @@ async function handleGenerate(skipDuplicateCheck = false) {
         jobDescription: jdContent,
         jdLink: jdLink,
         jobTitle: jobTitle,
-        companyName: companyName
+        companyName: companyName,
+        force: skipDuplicateCheck === true
       })
     });
 
     const data = await response.json();
+    if (response.status === 409 && data.isDuplicate) {
+      loadingIndicator.classList.add('hidden');
+      statusSection.classList.add('hidden');
+      showDuplicateModal(companyName, () => handleGenerate(true));
+      return;
+    }
     if (!response.ok) throw new Error(data.error || 'Failed to generate documents');
 
     // Show result
@@ -546,12 +591,22 @@ async function handleGenerate(skipDuplicateCheck = false) {
     resultSection.classList.remove('hidden');
 
     // Set resume download links
-    document.getElementById('downloadResumeDoc').href = `${config.apiUrl}${data.application.cvDocUrl}`;
-    document.getElementById('downloadResumePdf').href = `${config.apiUrl}${data.application.cvPdfUrl}`;
-    
-    // Set cover letter download links
-    document.getElementById('downloadCoverLetterDoc').href = `${config.apiUrl}${data.application.coverLetterDocUrl}`;
-    document.getElementById('downloadCoverLetterPdf').href = `${config.apiUrl}${data.application.coverLetterPdfUrl}`;
+    document.getElementById('downloadResumeDoc').href = resolveFileUrl(data.application.cvDocUrl);
+    document.getElementById('downloadResumePdf').href = resolveFileUrl(data.application.cvPdfUrl);
+
+    const coverLetterSection = document.getElementById('coverLetterResult');
+    const hasCoverLetter = data.application.coverLetterDocUrl || data.application.coverLetterPdfUrl;
+    if (coverLetterSection) {
+      coverLetterSection.classList.toggle('hidden', !hasCoverLetter);
+    }
+
+    document.getElementById('downloadCoverLetterDoc').href = resolveFileUrl(data.application.coverLetterDocUrl);
+    document.getElementById('downloadCoverLetterPdf').href = resolveFileUrl(data.application.coverLetterPdfUrl);
+
+    if (data.warning) {
+      document.getElementById('errorSection').classList.remove('hidden');
+      document.getElementById('errorMessage').textContent = data.warning;
+    }
 
     // Set download file names (sanitized for valid filenames)
     const fullName = sanitizeFilename(currentUser?.full_name || 'Resume');
@@ -565,6 +620,7 @@ async function handleGenerate(skipDuplicateCheck = false) {
     errorSection.classList.remove('hidden');
     document.getElementById('errorMessage').textContent = error.message;
   } finally {
+    btn.dataset.generating = 'false';
     btn.disabled = false;
   }
 }

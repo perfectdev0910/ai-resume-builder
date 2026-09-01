@@ -13,7 +13,7 @@ Deploy your AI Resume Builder for **FREE** using:
 2. [Render.com](https://render.com) account
 3. [Vercel](https://vercel.com) account
 4. [Supabase](https://supabase.com) account
-5. [OpenAI](https://platform.openai.com) API key
+5. [DeepSeek](https://platform.deepseek.com) API key
 
 ---
 
@@ -91,7 +91,9 @@ In Render dashboard, add these environment variables:
 | `NODE_ENV` | `production` |
 | `PORT` | `3000` |
 | `JWT_SECRET` | (generate: `openssl rand -hex 32`) |
-| `OPENAI_API_KEY` | `sk-your-openai-key` |
+| `DEEPSEEK_API_KEY` | `sk-your-deepseek-key` |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` |
+| `DEEPSEEK_MODEL` | `deepseek-v4-flash` |
 | `DATABASE_URL` | (from Supabase Step 1.2) |
 | `SUPABASE_URL` | `https://xxxxx.supabase.co` |
 | `SUPABASE_SERVICE_KEY` | (from Supabase Step 1.4) |
@@ -217,7 +219,7 @@ R2_PUBLIC_URL=https://pub-xxxxx.r2.dev
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │ Chrome Extension│────▶│  Backend (Render) │────▶│ Supabase/R2     │
 └─────────────────┘     │  - Express.js     │     │ - PostgreSQL DB │
-                        │  - OpenAI API     │     │ - File Storage  │
+                        │  - DeepSeek API   │     │ - File Storage  │
 ┌─────────────────┐     │  - JWT Auth       │     └─────────────────┘
 │ Dashboard       │────▶│  - Cleanup Cron   │
 │ (Vercel)        │     └──────────────────┘
@@ -245,9 +247,9 @@ R2_PUBLIC_URL=https://pub-xxxxx.r2.dev
 | Vercel | 100GB bandwidth, unlimited sites | $0 |
 | Supabase | 500MB DB, 1GB storage, 2GB bandwidth | $0 |
 | Cloudflare R2 | 10GB storage, 1M requests | $0 |
-| OpenAI | Pay per use (~$0.002/1K tokens) | ~$1-5 |
+| DeepSeek | Pay per use | ~$1-5 |
 
-**Total: ~$1-5/month** (only OpenAI API costs)
+**Total: ~$1-5/month** (only DeepSeek API costs)
 
 ---
 
@@ -279,7 +281,7 @@ R2_PUBLIC_URL=https://pub-xxxxx.r2.dev
 
 - Create an issue on GitHub
 - Check Render/Vercel/Supabase documentation
-- OpenAI API status: https://status.openai.com
+- DeepSeek platform: https://platform.deepseek.com
 
 ---
 
