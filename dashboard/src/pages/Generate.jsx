@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { cvAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import CompanySearch from '../components/CompanySearch';
 
 // Helper to sanitize filename
 const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
@@ -295,26 +296,11 @@ Include:
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="label">Company Name *</label>
-              <input
-                type="text"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                onBlur={() => setCompanyName((name) => prettyCompanyName(name))}
-                onPaste={(e) => {
-                  const pasted = e.clipboardData.getData('text');
-                  if (!pasted) return;
-                  e.preventDefault();
-                  setCompanyName(prettyCompanyName(pasted));
-                }}
-                className="input"
-                placeholder="e.g., Google, Microsoft"
-                disabled={loading}
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">Required. Used to check for duplicate applications</p>
-            </div>
+            <CompanySearch
+              value={companyName}
+              onChange={setCompanyName}
+              disabled={loading}
+            />
             <div>
               <label className="label">Job Posting URL (Optional)</label>
               <input

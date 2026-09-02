@@ -130,6 +130,7 @@ export const applicationsAPI = {
   update: (id, data) => api.put(`/applications/${id}`, data),
   delete: (id) => api.delete(`/applications/${id}`),
   checkDuplicate: (companyName) => api.get('/applications/check-duplicate', { params: { companyName } }),
+  getCompanies: (q = '') => api.get('/applications/companies', { params: q ? { q } : {} }),
   
   // Admin
   getAllAdmin: (params = {}) => api.get('/applications/admin/all', { params })
