@@ -124,6 +124,63 @@ router.get('/check-duplicate', authMiddleware, async (req, res) => {
   }
 });
 
+// Distinct companies from the user's application history
+router.get('/companies', authMiddleware, async (req, res) => {
+  try {
+    const search = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const params = [req.user.id];
+    let sqliteSearch = '';
+    let postgresSearch = '';
+
+    if (search) {
+      params.push(`%${search}%`);
+      sqliteSearch = 'AND LOWER(company_name) LIKE LOWER(?)';
+      postgresSearch = 'AND LOWER(company_name) LIKE LOWER($2)';
+    }
+
+    const companies = await getAllCompat(
+      `SELECT company_name, MAX(applied_at) as last_applied_at, COUNT(*) as count
+       FROM applications
+       WHERE user_id = ?
+         AND company_name IS NOT NULL
+         AND TRIM(company_name) != ''
+         ${sqliteSearch}
+       GROUP BY LOWER(company_name)
+       ORDER BY last_applied_at DESC
+       LIMIT 100`,
+      `SELECT MIN(company_name) as company_name, MAX(applied_at) as last_applied_at, COUNT(*)::int as count
+       FROM applications
+       WHERE user_id = $1
+         AND company_name IS NOT NULL
+         AND TRIM(company_name) != ''
+         ${postgresSearch}
+       GROUP BY LOWER(company_name)
+       ORDER BY last_applied_at DESC
+       LIMIT 100`,
+      params
+    );
+
+    const now = Date.now();
+    const windowMs = 30 * 24 * 60 * 60 * 1000;
+
+    res.json({
+      companies: companies.map((row) => {
+        const lastAppliedAt = row.last_applied_at;
+        const lastAppliedMs = lastAppliedAt ? new Date(lastAppliedAt).getTime() : 0;
+        return {
+          companyName: row.company_name,
+          lastAppliedAt,
+          applicationCount: Number(row.count) || 0,
+          isDuplicate: Boolean(lastAppliedMs && now - lastAppliedMs <= windowMs)
+        };
+      })
+    });
+  } catch (error) {
+    console.error('Companies fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch companies', details: error.message });
+  }
+});
+
 // Get application history with filtering and search
 router.get('/', authMiddleware, async (req, res) => {
   try {
