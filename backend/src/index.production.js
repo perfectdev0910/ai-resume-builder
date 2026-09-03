@@ -22,6 +22,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const applicationRoutes = require('./routes/applications');
 const cvRoutes = require('./routes/cv.production');
+const interviewRoutes = require('./routes/interviews');
 const { cleanupOldFiles } = require('./jobs/cleanup');
 
 const app = express();
@@ -94,6 +95,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/cv', cvRoutes);
+app.use('/api/interviews', interviewRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -217,6 +217,31 @@ async function initDatabase() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_additional_info_user_id ON additional_info(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_user_tags_user_id ON user_tags(user_id)`);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS interviews (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        parent_id INTEGER REFERENCES interviews(id) ON DELETE CASCADE,
+        company_name VARCHAR(255) NOT NULL,
+        job_title VARCHAR(255),
+        jd_link TEXT,
+        tech_stack TEXT,
+        application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
+        resume_label VARCHAR(255),
+        step VARCHAR(50),
+        interview_date VARCHAR(50),
+        meeting_link TEXT,
+        contact TEXT,
+        status VARCHAR(50) DEFAULT 'todo',
+        notes TEXT,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_user_id ON interviews(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_parent_id ON interviews(parent_id)`);
+
     // Data migrations for old column names -> new ones
     await client.query(`
       UPDATE employment_history

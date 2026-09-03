@@ -161,8 +161,34 @@ function initDatabase() {
 
       // Add cover letter columns if they don't exist (for existing databases)
       database.run(`ALTER TABLE applications ADD COLUMN cover_letter_doc_url TEXT`, (err) => {});
-      database.run(`ALTER TABLE applications ADD COLUMN cover_letter_pdf_url TEXT`, (err) => {
-        if (err && !err.message.includes('duplicate')) reject(err);
+      database.run(`ALTER TABLE applications ADD COLUMN cover_letter_pdf_url TEXT`, (err) => {});
+
+      database.run(`
+        CREATE TABLE IF NOT EXISTS interviews (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          parent_id INTEGER,
+          company_name TEXT NOT NULL,
+          job_title TEXT,
+          jd_link TEXT,
+          tech_stack TEXT,
+          application_id INTEGER,
+          resume_label TEXT,
+          step TEXT,
+          interview_date TEXT,
+          meeting_link TEXT,
+          contact TEXT,
+          status TEXT DEFAULT 'todo',
+          notes TEXT,
+          sort_order INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (parent_id) REFERENCES interviews(id) ON DELETE CASCADE,
+          FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL
+        )
+      `, (err) => {
+        if (err) reject(err);
         else resolve();
       });
     });

@@ -8,6 +8,7 @@ import Profile from './pages/Profile';
 import History from './pages/History';
 import Generate from './pages/Generate';
 import Users from './pages/Users';
+import Interviews from './pages/Interviews';
 
 function PrivateRoute({ children, adminOnly = false }) {
   const { isAuthenticated, user, loading } = useAuth();
@@ -71,6 +72,7 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="profile" element={<Profile />} />
         <Route path="history" element={<History />} />
+        <Route path="interviews" element={<Interviews />} />
         <Route path="generate" element={<Generate />} />
         <Route path="users" element={
           <PrivateRoute adminOnly>

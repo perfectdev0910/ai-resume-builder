@@ -122,6 +122,14 @@ export const cvAPI = {
   }
 };
 
+// Interviews API
+export const interviewsAPI = {
+  getAll: (params = {}) => api.get('/interviews', { params }),
+  create: (data) => api.post('/interviews', data),
+  update: (id, data) => api.put(`/interviews/${id}`, data),
+  delete: (id) => api.delete(`/interviews/${id}`)
+};
+
 // Applications API
 export const applicationsAPI = {
   getAll: (params = {}) => api.get('/applications', { params }),
