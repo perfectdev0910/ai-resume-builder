@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { formatLiveClock, resolveTimeZone } from '../utils/timezone';
 
 const navItems = [
@@ -26,17 +27,46 @@ function TimezoneClock({ timeZone }) {
     <NavLink
       to="/profile"
       title={`Times use ${clock.timeZone}. Click to change timezone.`}
-      className="mx-4 mb-3 block rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 hover:border-primary-200 hover:bg-primary-50 transition-colors"
+      className="mx-4 mb-3 block rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 hover:border-primary-200 hover:bg-primary-50 transition-colors dark:border-gray-700 dark:bg-gray-800/60 dark:hover:border-primary-700 dark:hover:bg-primary-900/20"
     >
-      <div className="flex items-center gap-2 text-gray-500">
+      <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
         <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <span className="text-[10px] font-medium uppercase tracking-wide truncate">{clock.abbreviation}</span>
       </div>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-gray-900 leading-none">{clock.time}</p>
-      <p className="mt-1 text-xs text-gray-500 truncate">{clock.day} · {clock.timeZone}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100 leading-none">{clock.time}</p>
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">{clock.day} · {clock.timeZone}</p>
     </NavLink>
+  );
+}
+
+function ThemeToggle() {
+  const { isDark, toggleTheme } = useTheme();
+
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="mx-4 mb-3 w-[calc(100%-2rem)] flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      <span className="flex items-center gap-2">
+        {isDark ? (
+          <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+        )}
+        {isDark ? 'Light mode' : 'Dark mode'}
+      </span>
+      <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${isDark ? 'bg-primary-500' : 'bg-gray-300'}`}>
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isDark ? 'translate-x-4' : 'translate-x-0.5'}`} />
+      </span>
+    </button>
   );
 }
 
@@ -50,25 +80,25 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Sidebar */}
-      <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 z-10">
+      <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 z-10 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200">
+          <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200 dark:border-gray-800">
             <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-purple-600 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <div>
-              <h1 className="font-bold text-gray-900">AI Resume Builder</h1>
-              <p className="text-xs text-gray-500">Generate tailored CVs</p>
+              <h1 className="font-bold text-gray-900 dark:text-gray-100">AI Resume Builder</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Generate tailored CVs</p>
             </div>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-4 space-y-1">
+          <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
@@ -77,8 +107,8 @@ export default function Layout() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-primary-50 text-primary-600'
-                      : 'text-gray-600 hover:bg-gray-50'
+                      ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
                   }`
                 }
               >
@@ -95,8 +125,8 @@ export default function Layout() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-primary-50 text-primary-600'
-                      : 'text-gray-600 hover:bg-gray-50'
+                      ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
                   }`
                 }
               >
@@ -108,24 +138,25 @@ export default function Layout() {
             )}
           </nav>
 
+          <ThemeToggle />
           <TimezoneClock timeZone={user?.timezone} />
 
           {/* User */}
-          <div className="border-t border-gray-200 p-4">
+          <div className="border-t border-gray-200 p-4 dark:border-gray-800">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                <span className="text-primary-600 font-semibold">
+              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center dark:bg-primary-900/40">
+                <span className="text-primary-600 font-semibold dark:text-primary-300">
                   {user?.full_name?.charAt(0)?.toUpperCase() || 'U'}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{user?.full_name}</p>
-                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                <p className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{user?.full_name}</p>
+                <p className="text-xs text-gray-500 truncate dark:text-gray-400">{user?.email}</p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
