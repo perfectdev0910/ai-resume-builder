@@ -1,5 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { formatLiveClock, resolveTimeZone } from '../utils/timezone';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -7,6 +9,35 @@ const navItems = [
   { to: '/history', label: 'History', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   { to: '/profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
 ];
+
+function TimezoneClock({ timeZone }) {
+  const tz = resolveTimeZone(timeZone);
+  const [clock, setClock] = useState(() => formatLiveClock(new Date(), tz));
+
+  useEffect(() => {
+    const tick = () => setClock(formatLiveClock(new Date(), tz));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [tz]);
+
+  return (
+    <NavLink
+      to="/profile"
+      title={`Times use ${clock.timeZone}. Click to change timezone.`}
+      className="mx-4 mb-3 block rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 hover:border-primary-200 hover:bg-primary-50 transition-colors"
+    >
+      <div className="flex items-center gap-2 text-gray-500">
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span className="text-[10px] font-medium uppercase tracking-wide truncate">{clock.abbreviation}</span>
+      </div>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-gray-900 leading-none">{clock.time}</p>
+      <p className="mt-1 text-xs text-gray-500 truncate">{clock.day} · {clock.timeZone}</p>
+    </NavLink>
+  );
+}
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -75,6 +106,8 @@ export default function Layout() {
               </NavLink>
             )}
           </nav>
+
+          <TimezoneClock timeZone={user?.timezone} />
 
           {/* User */}
           <div className="border-t border-gray-200 p-4">

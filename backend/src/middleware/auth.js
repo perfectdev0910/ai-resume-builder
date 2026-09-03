@@ -54,8 +54,8 @@ async function authMiddleware(req, res, next) {
     const decoded = verifyToken(token);
 
     const user = await getOneCompat(
-      'SELECT id, email, full_name, role, status FROM users WHERE id = ?',
-      'SELECT id, email, full_name, role, status FROM users WHERE id = $1',
+      'SELECT id, email, full_name, role, status, timezone FROM users WHERE id = ?',
+      'SELECT id, email, full_name, role, status, timezone FROM users WHERE id = $1',
       [decoded.id]
     );
 

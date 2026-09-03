@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { usersAPI, applicationsAPI } from '../utils/api';
 import { format } from 'date-fns';
+import { useAuth } from '../contexts/AuthContext';
+import { formatDateKey, formatInTimeZone, resolveTimeZone } from '../utils/timezone';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -30,6 +32,8 @@ ChartJS.register(
 );
 
 export default function Users() {
+  const { user: adminUser } = useAuth();
+  const adminTimezone = resolveTimeZone(adminUser?.timezone);
   const [users, setUsers] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -336,7 +340,7 @@ export default function Users() {
               {adminStats?.dailyStats?.length > 0 ? (
                 <Line
                   data={{
-                    labels: adminStats.dailyStats.map(d => format(new Date(d.date), 'MMM d')).reverse(),
+                    labels: adminStats.dailyStats.map(d => formatDateKey(d.date, 'MMM d')).reverse(),
                     datasets: [{
                       label: 'Applications',
                       data: adminStats.dailyStats.map(d => d.count).reverse(),
@@ -461,7 +465,7 @@ export default function Users() {
                     <td className="px-6 py-4 text-gray-900">{app.jobTitle || '-'}</td>
                     <td className="px-6 py-4 text-gray-900">{app.companyName || '-'}</td>
                     <td className="px-6 py-4 text-gray-500">
-                      {app.appliedAt ? format(new Date(app.appliedAt), 'MMM d, yyyy h:mm a') : '-'}
+                      {app.appliedAt ? formatInTimeZone(app.appliedAt, adminTimezone, 'MMM d, yyyy h:mm a') : '-'}
                     </td>
                   </tr>
                 )) : (
@@ -673,7 +677,7 @@ export default function Users() {
                     {app.companyName || 'Unknown'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {format(new Date(app.appliedAt), 'MMM d, yyyy h:mm a')}
+                    {formatInTimeZone(app.appliedAt, adminTimezone, 'MMM d, yyyy h:mm a')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs rounded-full ${

@@ -18,6 +18,7 @@ export function AuthProvider({ children }) {
       try {
         const response = await authAPI.getMe();
         setUser(response.data.user);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
         setIsAuthenticated(true);
       } catch (error) {
         localStorage.removeItem('authToken');
@@ -50,8 +51,11 @@ export function AuthProvider({ children }) {
   };
 
   const updateUser = (updatedUser) => {
-    setUser(prev => ({ ...prev, ...updatedUser }));
-    localStorage.setItem('user', JSON.stringify({ ...user, ...updatedUser }));
+    setUser((prev) => {
+      const next = { ...prev, ...updatedUser };
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
   };
 
   return (

@@ -1,31 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-
-// Common timezones list
-const TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Toronto',
-  'America/Vancouver',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Rome',
-  'Europe/Madrid',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Asia/Hong_Kong',
-  'Asia/Singapore',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland'
-];
+import { detectTimeZone, timezoneSelectOptions } from '../utils/timezone';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -46,14 +22,8 @@ export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  // Auto-detect user's timezone on component mount
   useEffect(() => {
-    const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (TIMEZONES.includes(detectedTimezone)) {
-      setFormData(prev => ({ ...prev, timezone: detectedTimezone }));
-    } else {
-      setFormData(prev => ({ ...prev, timezone: 'UTC' }));
-    }
+    setFormData(prev => ({ ...prev, timezone: detectTimeZone() }));
   }, []);
 
   const handleChange = (e) => {
@@ -211,11 +181,11 @@ export default function Register() {
                   onChange={handleChange}
                   className="input"
                 >
-                  {TIMEZONES.map(tz => (
+                  {timezoneSelectOptions(formData.timezone).map(tz => (
                     <option key={tz} value={tz}>{tz}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">Used for displaying log history timestamps</p>
+                <p className="text-xs text-gray-500 mt-1">Used for dashboard counts and application timestamps</p>
               </div>
               <div>
                 <label className="label">Address</label>

@@ -7,6 +7,7 @@ const db = isPostgres
   : require('../models/database');
 
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { resolveTimeZone, getPeriodRange, sqlUtc } = require('../utils/timezone');
 
 const router = express.Router();
 
@@ -954,12 +955,18 @@ router.get('/admin/stats', authMiddleware, adminMiddleware, async (req, res) => 
     let postgresDateFilter = '';
     let sqliteUserFilter = '';
     let postgresUserFilter = '';
+    const adminTimezone = resolveTimeZone(req.user.timezone);
 
     const nextParam = () => (isPostgres ? `$${params.length + 1}` : '?');
 
     if (period === 'daily') {
-      sqliteDateFilter = "AND DATE(a.applied_at) = DATE('now')";
-      postgresDateFilter = "AND DATE(a.applied_at) = CURRENT_DATE";
+      const range = getPeriodRange(adminTimezone, 'daily');
+      sqliteDateFilter = 'AND datetime(a.applied_at) >= datetime(?) AND datetime(a.applied_at) < datetime(?)';
+      const startPlaceholder = nextParam();
+      params.push(sqlUtc(range.start));
+      const endPlaceholder = nextParam();
+      params.push(sqlUtc(range.end));
+      postgresDateFilter = `AND a.applied_at >= ${startPlaceholder} AND a.applied_at < ${endPlaceholder}`;
     } else if (period === 'weekly') {
       sqliteDateFilter = "AND a.applied_at >= DATE('now', '-7 days')";
       postgresDateFilter = "AND a.applied_at >= NOW() - INTERVAL '7 days'";
@@ -1123,12 +1130,18 @@ router.get('/admin/applications', authMiddleware, adminMiddleware, async (req, r
     let postgresDateFilter = '';
     let sqliteUserFilter = '';
     let postgresUserFilter = '';
+    const adminTimezone = resolveTimeZone(req.user.timezone);
 
     const nextParam = () => (isPostgres ? `$${params.length + 1}` : '?');
 
     if (period === 'daily') {
-      sqliteDateFilter = "AND DATE(a.applied_at) = DATE('now')";
-      postgresDateFilter = "AND DATE(a.applied_at) = CURRENT_DATE";
+      const range = getPeriodRange(adminTimezone, 'daily');
+      sqliteDateFilter = 'AND datetime(a.applied_at) >= datetime(?) AND datetime(a.applied_at) < datetime(?)';
+      const startPlaceholder = nextParam();
+      params.push(sqlUtc(range.start));
+      const endPlaceholder = nextParam();
+      params.push(sqlUtc(range.end));
+      postgresDateFilter = `AND a.applied_at >= ${startPlaceholder} AND a.applied_at < ${endPlaceholder}`;
     } else if (period === 'weekly') {
       sqliteDateFilter = "AND a.applied_at >= DATE('now', '-7 days')";
       postgresDateFilter = "AND a.applied_at >= NOW() - INTERVAL '7 days'";

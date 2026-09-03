@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { applicationsAPI, cvAPI } from '../utils/api';
-import { format, parseISO } from 'date-fns';
-import { toZonedTime, format as formatTz } from 'date-fns-tz';
+import { formatInTimeZone, resolveTimeZone } from '../utils/timezone';
 import { useAuth } from '../contexts/AuthContext';
 
 // Helper to sanitize filename
@@ -67,7 +66,7 @@ export default function History() {
   const [filter, setFilter] = useState('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [searchQuery, setSearchQuery] = useState('');
-  const [userTimezone, setUserTimezone] = useState('UTC');
+  const userTimezone = resolveTimeZone(user?.timezone || 'UTC');
 
   useEffect(() => {
     fetchApplications();
@@ -100,10 +99,6 @@ export default function History() {
         total: response.data?.pagination?.total || 0,
         totalPages: response.data?.pagination?.totalPages || 1
       }));
-      // Set user timezone from response
-      if (response.data?.userTimezone) {
-        setUserTimezone(response.data.userTimezone);
-      }
     } catch (error) {
       console.error('Failed to fetch applications:', error);
       setApplications([]);
@@ -252,11 +247,7 @@ export default function History() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        {(() => {
-                          const utcDate = app.appliedAt.endsWith('Z') ? parseISO(app.appliedAt) : parseISO(app.appliedAt + 'Z');
-                          const zonedDate = toZonedTime(utcDate, userTimezone);
-                          return formatTz(zonedDate, 'MMM d, yyyy h:mm a', { timeZone: userTimezone });
-                        })()}
+                        {formatInTimeZone(app.appliedAt, userTimezone, 'MMM d, yyyy h:mm a')}
                       </span>
                       {app.jdLink && (
                         <a

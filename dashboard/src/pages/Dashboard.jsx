@@ -13,10 +13,9 @@ import {
   Legend,
   Filler
 } from 'chart.js';
-import { applicationsAPI, usersAPI } from '../utils/api';
+import { applicationsAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
-import { format, parseISO } from 'date-fns';
-import { toZonedTime, format as formatTz } from 'date-fns-tz';
+import { formatDateKey, formatInTimeZone, resolveTimeZone } from '../utils/timezone';
 
 // Helper to sanitize filename
 const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
@@ -38,25 +37,20 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [recentApplications, setRecentApplications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [userTimezone, setUserTimezone] = useState('UTC');
+  const userTimezone = resolveTimeZone(user?.timezone);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [userTimezone]);
 
   const fetchData = async () => {
     try {
-      const [statsRes, appsRes, profileRes] = await Promise.all([
+      const [statsRes, appsRes] = await Promise.all([
         applicationsAPI.getStats(),
         applicationsAPI.getAll({ limit: 5 }),
-        usersAPI.getProfile()
       ]);
       setStats(statsRes.data);
       setRecentApplications(appsRes.data.applications);
-      // Get user timezone from profile
-      if (profileRes.data.profile?.timezone) {
-        setUserTimezone(profileRes.data.profile.timezone);
-      }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
@@ -64,19 +58,11 @@ export default function Dashboard() {
     }
   };
 
-  // Helper to format date in user's timezone
-  const formatDateInTimezone = (dateStr, formatStr = 'MMM d, yyyy') => {
-    try {
-      const utcDate = dateStr.endsWith('Z') ? parseISO(dateStr) : parseISO(dateStr + 'Z');
-      const zonedDate = toZonedTime(utcDate, userTimezone);
-      return formatTz(zonedDate, formatStr, { timeZone: userTimezone });
-    } catch {
-      return format(new Date(dateStr), formatStr);
-    }
-  };
+  const formatDateInTimezone = (dateStr, formatStr = 'MMM d, yyyy') =>
+    formatInTimeZone(dateStr, userTimezone, formatStr);
 
   const lineChartData = {
-    labels: stats?.timeline?.map(t => formatDateInTimezone(t.date, 'MMM d')) || [],
+    labels: stats?.timeline?.map(t => formatDateKey(t.date, 'MMM d')) || [],
     datasets: [
       {
         label: 'Applications',
@@ -122,6 +108,7 @@ export default function Dashboard() {
             Welcome back, {user?.full_name?.split(' ')[0]}! 👋
           </h1>
           <p className="text-gray-500 mt-1">Here's an overview of your job applications</p>
+          <p className="text-xs text-gray-400 mt-1">Times and daily counts use {userTimezone}</p>
         </div>
         <Link to="/generate" className="btn btn-primary">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

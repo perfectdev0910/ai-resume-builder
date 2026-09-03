@@ -9,6 +9,7 @@ const db = isPostgres
 
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 const { prettyCompanyName } = require('../utils/companyName');
+const { resolveTimeZone, sqlUtc, getPeriodRange, localDateKey } = require('../utils/timezone');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
@@ -194,15 +195,22 @@ router.get('/', authMiddleware, async (req, res) => {
     let sqliteSearchFilter = '';
     let postgresSearchFilter = '';
     const params = [req.user.id];
+    const userTimezone = resolveTimeZone(req.user.timezone);
 
     const nextParam = () => (isPostgres ? `$${params.length + 1}` : '?');
 
     if (period) {
       switch (period) {
-        case 'daily':
-          sqliteDateFilter = "AND DATE(applied_at) = DATE('now')";
-          postgresDateFilter = "AND DATE(applied_at) = CURRENT_DATE";
+        case 'daily': {
+          const range = getPeriodRange(userTimezone, 'daily');
+          sqliteDateFilter = 'AND datetime(applied_at) >= datetime(?) AND datetime(applied_at) < datetime(?)';
+          const startPlaceholder = nextParam();
+          params.push(sqlUtc(range.start));
+          const endPlaceholder = nextParam();
+          params.push(sqlUtc(range.end));
+          postgresDateFilter = `AND applied_at >= ${startPlaceholder} AND applied_at < ${endPlaceholder}`;
           break;
+        }
         case 'weekly':
           sqliteDateFilter = "AND applied_at >= DATE('now', '-7 days')";
           postgresDateFilter = "AND applied_at >= NOW() - INTERVAL '7 days'";
@@ -262,14 +270,6 @@ router.get('/', authMiddleware, async (req, res) => {
       );
     }
 
-    const user = await getOneCompat(
-      'SELECT timezone FROM users WHERE id = ?',
-      'SELECT timezone FROM users WHERE id = $1',
-      [req.user.id]
-    );
-
-    const userTimezone = user?.timezone || 'UTC';
-
     const formattedApps = applications.map(app => ({
       id: app.id,
       jobTitle: app.job_title,
@@ -304,59 +304,52 @@ router.get('/', authMiddleware, async (req, res) => {
 // Get application statistics
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
+    const userTimezone = resolveTimeZone(req.user.timezone);
+    const todayRange = getPeriodRange(userTimezone, 'daily');
+    const weekRange = getPeriodRange(userTimezone, 'weekly');
+    const monthRange = getPeriodRange(userTimezone, 'monthly');
+    const statParams = [
+      sqlUtc(todayRange.start),
+      sqlUtc(todayRange.end),
+      sqlUtc(weekRange.start),
+      sqlUtc(weekRange.end),
+      sqlUtc(monthRange.start),
+      sqlUtc(monthRange.end),
+      req.user.id
+    ];
+
     const stats = await getAllCompat(
-      // ✅ SQLite (basic fallback — no timezone support)
       `
       SELECT
         COUNT(*) as total,
-
         COUNT(*) FILTER (
-          WHERE DATE(applied_at) = DATE('now')
+          WHERE datetime(applied_at) >= datetime(?) AND datetime(applied_at) < datetime(?)
         ) as today,
-
-        -- Week: Monday → Sunday
         COUNT(*) FILTER (
-          WHERE DATE(applied_at) >= DATE('now', 'weekday 1', '-7 days')
-            AND DATE(applied_at) < DATE('now', 'weekday 1')
+          WHERE datetime(applied_at) >= datetime(?) AND datetime(applied_at) < datetime(?)
         ) as thisWeek,
-
-        -- Month: 1st → end
         COUNT(*) FILTER (
-          WHERE DATE(applied_at) >= DATE('now', 'start of month')
-            AND DATE(applied_at) < DATE('now', 'start of month', '+1 month')
+          WHERE datetime(applied_at) >= datetime(?) AND datetime(applied_at) < datetime(?)
         ) as thisMonth
-
       FROM applications
       WHERE user_id = ?
       `,
-
-      // ✅ PostgreSQL (Supabase with timezone fix 🚀)
       `
       SELECT
         COUNT(*)::int as total,
-
-        -- Today (local time)
         COUNT(*) FILTER (
-          WHERE (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles')::date = CURRENT_DATE
+          WHERE applied_at >= $1 AND applied_at < $2
         )::int as today,
-
-        -- Week: Monday → Sunday (local time)
         COUNT(*) FILTER (
-          WHERE (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') >= date_trunc('week', CURRENT_DATE)
-            AND (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week'
+          WHERE applied_at >= $3 AND applied_at < $4
         )::int as thisWeek,
-
-        -- Month: 1st → end (local time)
         COUNT(*) FILTER (
-          WHERE (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') >= date_trunc('month', CURRENT_DATE)
-            AND (applied_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+          WHERE applied_at >= $5 AND applied_at < $6
         )::int as thisMonth
-
       FROM applications
-      WHERE user_id = $1
+      WHERE user_id = $7
       `,
-
-      [req.user.id]
+      statParams
     );
 
     const byCompany = await getAllCompat(
@@ -375,24 +368,28 @@ router.get('/stats', authMiddleware, async (req, res) => {
       [req.user.id]
     );
 
-    const timeline = await getAllCompat(
-      `SELECT DATE(applied_at) as date, COUNT(*) as count
-       FROM applications
-       WHERE user_id = ? AND applied_at >= DATE('now', '-30 days')
-       GROUP BY DATE(applied_at)
-       ORDER BY date`,
-      `SELECT DATE(applied_at) as date, COUNT(*)::int as count
-       FROM applications
-       WHERE user_id = $1 AND applied_at >= NOW() - INTERVAL '30 days'
-       GROUP BY DATE(applied_at)
-       ORDER BY date`,
-      [req.user.id]
+    const timelineCutoff = sqlUtc(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    const recentRows = await getAllCompat(
+      `SELECT applied_at FROM applications WHERE user_id = ? AND datetime(applied_at) >= datetime(?)`,
+      `SELECT applied_at FROM applications WHERE user_id = $1 AND applied_at >= $2`,
+      [req.user.id, timelineCutoff]
     );
+
+    const timelineBuckets = {};
+    for (const row of recentRows) {
+      const key = localDateKey(row.applied_at, userTimezone);
+      if (!key) continue;
+      timelineBuckets[key] = (timelineBuckets[key] || 0) + 1;
+    }
+    const timeline = Object.keys(timelineBuckets)
+      .sort()
+      .map((date) => ({ date, count: timelineBuckets[date] }));
 
     res.json({
       stats: stats[0] || { total: 0, today: 0, thisWeek: 0, thisMonth: 0 },
       byCompany,
-      timeline
+      timeline,
+      userTimezone
     });
   } catch (error) {
     console.error('Stats fetch error:', error);

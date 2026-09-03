@@ -1,31 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usersAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
-
-// Common timezones list
-const TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Toronto',
-  'America/Vancouver',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Rome',
-  'Europe/Madrid',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Asia/Hong_Kong',
-  'Asia/Singapore',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland'
-];
+import { timezoneSelectOptions } from '../utils/timezone';
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
@@ -64,7 +40,11 @@ export default function Profile() {
   };
 
   const handleBasicInfoChange = (e) => {
-    setBasicInfo(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setBasicInfo(prev => ({ ...prev, [name]: value }));
+    if (name === 'timezone') {
+      updateUser({ timezone: value });
+    }
   };
 
   const handleSaveBasicInfo = async () => {
@@ -275,11 +255,11 @@ export default function Profile() {
             <div>
               <label className="label">Timezone</label>
               <select name="timezone" value={basicInfo.timezone || 'UTC'} onChange={handleBasicInfoChange} className="input">
-                {TIMEZONES.map(tz => (
+                {timezoneSelectOptions(basicInfo.timezone).map(tz => (
                   <option key={tz} value={tz}>{tz}</option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500 mt-1">Used for displaying log history timestamps</p>
+              <p className="text-xs text-gray-500 mt-1">Sidebar clock and application times update as soon as you pick a timezone. Click Save to keep it.</p>
             </div>
             <div>
               <label className="label">Address</label>
