@@ -167,25 +167,24 @@ function initDatabase() {
         CREATE TABLE IF NOT EXISTS interviews (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id INTEGER NOT NULL,
-          parent_id INTEGER,
+          application_id INTEGER,
           company_name TEXT NOT NULL,
           job_title TEXT,
           jd_link TEXT,
-          tech_stack TEXT,
-          application_id INTEGER,
           resume_label TEXT,
-          step TEXT,
-          interview_date TEXT,
-          meeting_link TEXT,
-          contact TEXT,
-          status TEXT DEFAULT 'todo',
+          stage TEXT DEFAULT 'hr_screen',
+          status TEXT DEFAULT 'upcoming',
+          interview_at TEXT,
+          duration_minutes INTEGER DEFAULT 30,
+          platform TEXT DEFAULT 'google_meet',
+          call_link TEXT,
+          interviewer TEXT,
           notes TEXT,
-          sort_order INTEGER DEFAULT 0,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-          FOREIGN KEY (parent_id) REFERENCES interviews(id) ON DELETE CASCADE,
-          FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL
+          FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL,
+          UNIQUE(user_id, company_name)
         )
       `, (err) => {
         if (err) reject(err);

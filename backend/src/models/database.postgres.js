@@ -221,26 +221,26 @@ async function initDatabase() {
       CREATE TABLE IF NOT EXISTS interviews (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        parent_id INTEGER REFERENCES interviews(id) ON DELETE CASCADE,
+        application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
         company_name VARCHAR(255) NOT NULL,
         job_title VARCHAR(255),
         jd_link TEXT,
-        tech_stack TEXT,
-        application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
         resume_label VARCHAR(255),
-        step VARCHAR(50),
-        interview_date VARCHAR(50),
-        meeting_link TEXT,
-        contact TEXT,
-        status VARCHAR(50) DEFAULT 'todo',
+        stage VARCHAR(50) DEFAULT 'hr_screen',
+        status VARCHAR(50) DEFAULT 'upcoming',
+        interview_at TIMESTAMP,
+        duration_minutes INTEGER DEFAULT 30,
+        platform VARCHAR(50) DEFAULT 'google_meet',
+        call_link TEXT,
+        interviewer TEXT,
         notes TEXT,
-        sort_order INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, company_name)
       )
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_user_id ON interviews(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_parent_id ON interviews(parent_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status)`);
 
     // Data migrations for old column names -> new ones
     await client.query(`

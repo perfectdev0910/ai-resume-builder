@@ -127,6 +127,7 @@ export const interviewsAPI = {
   getAll: (params = {}) => api.get('/interviews', { params }),
   create: (data) => api.post('/interviews', data),
   update: (id, data) => api.put(`/interviews/${id}`, data),
+  progress: (id, action) => api.post(`/interviews/${id}/progress`, { action }),
   delete: (id) => api.delete(`/interviews/${id}`)
 };
 
@@ -138,7 +139,13 @@ export const applicationsAPI = {
   update: (id, data) => api.put(`/applications/${id}`, data),
   delete: (id) => api.delete(`/applications/${id}`),
   checkDuplicate: (companyName) => api.get('/applications/check-duplicate', { params: { companyName } }),
-  getCompanies: (q = '') => api.get('/applications/companies', { params: q ? { q } : {} }),
+  getCompanies: (q = '', options = {}) =>
+    api.get('/applications/companies', {
+      params: {
+        ...(q ? { q } : {}),
+        ...(options.forInterview ? { forInterview: 1 } : {})
+      }
+    }),
   
   // Admin
   getAllAdmin: (params = {}) => api.get('/applications/admin/all', { params })

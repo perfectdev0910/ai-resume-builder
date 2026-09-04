@@ -6,11 +6,22 @@ const db = isPostgres
   : require('../models/database');
 
 const { authMiddleware } = require('../middleware/auth');
+const { prettyCompanyName } = require('../utils/companyName');
 
 const router = express.Router();
 
-const STEPS = new Set(['phone_call', 'hr_call', 'hiring_manager', 'technical', 'onsite', 'offer']);
-const STATUSES = new Set(['todo', 'waiting_feedback', 'passed', 'rejected']);
+const STAGES = [
+  'hr_screen',
+  'assessment',
+  'technical',
+  'background_check',
+  'onsite_final',
+  'offer'
+];
+
+const STATUSES = new Set(['upcoming', 'waiting_feedback', 'completed', 'rejected']);
+const PLATFORMS = new Set(['google_meet', 'zoom', 'teams', 'phone', 'other']);
+const COMPLETED_STATUSES = new Set(['completed', 'waiting_feedback', 'rejected']);
 
 async function getOneCompat(sqliteSql, postgresSql, params = []) {
   if (isPostgres) {
@@ -36,61 +47,45 @@ async function runQueryCompat(sqliteSql, postgresSql, params = []) {
   return db.runQuery(sqliteSql, params);
 }
 
-function parseTechStack(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
-  }
-  if (!value) return [];
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed.map((item) => String(item).trim()).filter(Boolean);
-      }
-    } catch {
-      return value.split(',').map((item) => item.trim()).filter(Boolean);
-    }
-  }
-  return [];
-}
-
-function serializeTechStack(value) {
-  return JSON.stringify(parseTechStack(value));
+function publicFileUrl(stored) {
+  if (!stored) return null;
+  if (/^https?:\/\//i.test(stored)) return stored;
+  return `/uploads/${String(stored).split('/').pop()}`;
 }
 
 function formatInterview(row) {
+  const stageIndex = Math.max(0, STAGES.indexOf(row.stage));
   return {
     id: row.id,
-    parentId: row.parent_id || null,
+    applicationId: row.application_id || null,
     companyName: row.company_name || '',
     jobTitle: row.job_title || '',
     jdLink: row.jd_link || '',
-    techStack: parseTechStack(row.tech_stack),
-    applicationId: row.application_id || null,
-    resumeLabel: row.resume_label || row.application_resume_label || '',
-    resumeDocUrl: row.cv_doc_url || null,
-    resumePdfUrl: row.cv_pdf_url || null,
-    step: row.step || '',
-    interviewDate: row.interview_date || '',
-    meetingLink: row.meeting_link || '',
-    contact: row.contact || '',
-    status: row.status || 'todo',
+    resumeLabel: row.resume_label || '',
+    resumeDocUrl: publicFileUrl(row.cv_doc_url),
+    resumePdfUrl: publicFileUrl(row.cv_pdf_url),
+    stage: row.stage || 'hr_screen',
+    stageIndex,
+    stageCount: STAGES.length,
+    status: row.status || 'upcoming',
+    interviewAt: row.interview_at || null,
+    durationMinutes: row.duration_minutes != null ? Number(row.duration_minutes) : 30,
+    platform: row.platform || 'google_meet',
+    callLink: row.call_link || '',
+    interviewer: row.interviewer || '',
     notes: row.notes || '',
-    sortOrder: Number(row.sort_order || 0),
     createdAt: row.created_at,
-    children: []
+    updatedAt: row.updated_at
   };
 }
 
 async function fetchInterview(id, userId) {
   return getOneCompat(
-    `SELECT i.*, a.cv_doc_url, a.cv_pdf_url,
-            CASE WHEN a.id IS NOT NULL THEN COALESCE(a.company_name, '') || ' Resume' ELSE NULL END as application_resume_label
+    `SELECT i.*, a.cv_doc_url, a.cv_pdf_url
      FROM interviews i
      LEFT JOIN applications a ON i.application_id = a.id
      WHERE i.id = ? AND i.user_id = ?`,
-    `SELECT i.*, a.cv_doc_url, a.cv_pdf_url,
-            CASE WHEN a.id IS NOT NULL THEN COALESCE(a.company_name, '') || ' Resume' ELSE NULL END as application_resume_label
+    `SELECT i.*, a.cv_doc_url, a.cv_pdf_url
      FROM interviews i
      LEFT JOIN applications a ON i.application_id = a.id
      WHERE i.id = $1 AND i.user_id = $2`,
@@ -98,103 +93,106 @@ async function fetchInterview(id, userId) {
   );
 }
 
-async function insertInterview(userId, fields) {
-  const values = [
-    userId,
-    fields.parentId || null,
-    fields.companyName,
-    fields.jobTitle || '',
-    fields.jdLink || '',
-    serializeTechStack(fields.techStack),
-    fields.applicationId || null,
-    fields.resumeLabel || '',
-    fields.step || '',
-    fields.interviewDate || '',
-    fields.meetingLink || '',
-    fields.contact || '',
-    fields.status || 'todo',
-    fields.notes || '',
-    fields.sortOrder || 0
-  ];
-
-  if (isPostgres) {
-    const result = await runQueryCompat(
-      '',
-      `INSERT INTO interviews
-        (user_id, parent_id, company_name, job_title, jd_link, tech_stack, application_id, resume_label, step, interview_date, meeting_link, contact, status, notes, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-       RETURNING id`,
-      values
+async function findLatestApplication(userId, { applicationId, companyName } = {}) {
+  if (applicationId) {
+    return getOneCompat(
+      `SELECT * FROM applications WHERE id = ? AND user_id = ?`,
+      `SELECT * FROM applications WHERE id = $1 AND user_id = $2`,
+      [applicationId, userId]
     );
-    return result.rows?.[0]?.id;
   }
 
-  const result = await runQueryCompat(
-    `INSERT INTO interviews
-      (user_id, parent_id, company_name, job_title, jd_link, tech_stack, application_id, resume_label, step, interview_date, meeting_link, contact, status, notes, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    '',
-    values
+  const name = prettyCompanyName(companyName);
+  if (!name) return null;
+
+  return getOneCompat(
+    `SELECT * FROM applications
+     WHERE user_id = ? AND LOWER(company_name) = LOWER(?)
+     ORDER BY applied_at DESC LIMIT 1`,
+    `SELECT * FROM applications
+     WHERE user_id = $1 AND LOWER(company_name) = LOWER($2)
+     ORDER BY applied_at DESC LIMIT 1`,
+    [userId, name]
   );
-  return result.lastID;
+}
+
+function resumeLabelFromApp(app) {
+  if (!app) return '';
+  const base = [app.company_name, app.job_title].filter(Boolean).join(' — ');
+  return base ? `${base} Resume` : 'Resume';
 }
 
 router.get('/', authMiddleware, async (req, res) => {
   try {
+    const tab = String(req.query.tab || 'all');
+    const stage = typeof req.query.stage === 'string' ? req.query.stage.trim() : '';
     const search = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const params = [req.user.id];
-    let sqliteSearch = '';
-    let postgresSearch = '';
+    let sqliteFilters = '';
+    let postgresFilters = '';
+
+    const nextParam = () => (isPostgres ? `$${params.length + 1}` : '?');
+
+    if (tab === 'upcoming') {
+      sqliteFilters += " AND i.status = 'upcoming'";
+      postgresFilters += " AND i.status = 'upcoming'";
+    } else if (tab === 'completed') {
+      sqliteFilters += " AND i.status IN ('completed', 'waiting_feedback', 'rejected')";
+      postgresFilters += " AND i.status IN ('completed', 'waiting_feedback', 'rejected')";
+    }
+
+    if (stage && STAGES.includes(stage)) {
+      const p = nextParam();
+      params.push(stage);
+      sqliteFilters += ' AND i.stage = ?';
+      postgresFilters += ` AND i.stage = ${p}`;
+    }
 
     if (search) {
       const like = `%${search}%`;
-      sqliteSearch = `AND (
-        LOWER(i.company_name) LIKE LOWER(?)
-        OR LOWER(COALESCE(i.job_title, '')) LIKE LOWER(?)
-        OR LOWER(COALESCE(i.contact, '')) LIKE LOWER(?)
-      )`;
-      postgresSearch = `AND (
-        LOWER(i.company_name) LIKE LOWER($2)
-        OR LOWER(COALESCE(i.job_title, '')) LIKE LOWER($2)
-        OR LOWER(COALESCE(i.contact, '')) LIKE LOWER($2)
-      )`;
-      if (isPostgres) params.push(like);
-      else params.push(like, like, like);
-    }
-
-    const rows = await getAllCompat(
-      `SELECT i.*, a.cv_doc_url, a.cv_pdf_url,
-              CASE WHEN a.id IS NOT NULL THEN COALESCE(a.company_name, '') || ' Resume' ELSE NULL END as application_resume_label
-       FROM interviews i
-       LEFT JOIN applications a ON i.application_id = a.id
-       WHERE i.user_id = ? ${sqliteSearch}
-       ORDER BY COALESCE(i.parent_id, i.id), CASE WHEN i.parent_id IS NULL THEN 0 ELSE 1 END, i.sort_order, i.id`,
-      `SELECT i.*, a.cv_doc_url, a.cv_pdf_url,
-              CASE WHEN a.id IS NOT NULL THEN COALESCE(a.company_name, '') || ' Resume' ELSE NULL END as application_resume_label
-       FROM interviews i
-       LEFT JOIN applications a ON i.application_id = a.id
-       WHERE i.user_id = $1 ${postgresSearch}
-       ORDER BY COALESCE(i.parent_id, i.id), CASE WHEN i.parent_id IS NULL THEN 0 ELSE 1 END, i.sort_order, i.id`,
-      params
-    );
-
-    const byId = new Map();
-    for (const row of rows) {
-      byId.set(row.id, formatInterview(row));
-    }
-
-    const tree = [];
-    for (const item of byId.values()) {
-      if (item.parentId && byId.has(item.parentId)) {
-        byId.get(item.parentId).children.push(item);
-      } else if (!item.parentId) {
-        tree.push(item);
+      if (isPostgres) {
+        const p = nextParam();
+        params.push(like);
+        postgresFilters += ` AND (
+          LOWER(i.company_name) LIKE LOWER(${p})
+          OR LOWER(COALESCE(i.job_title, '')) LIKE LOWER(${p})
+          OR LOWER(COALESCE(i.interviewer, '')) LIKE LOWER(${p})
+        )`;
       } else {
-        tree.push(item);
+        params.push(like, like, like);
+        sqliteFilters += ` AND (
+          LOWER(i.company_name) LIKE LOWER(?)
+          OR LOWER(COALESCE(i.job_title, '')) LIKE LOWER(?)
+          OR LOWER(COALESCE(i.interviewer, '')) LIKE LOWER(?)
+        )`;
       }
     }
 
-    res.json({ interviews: tree });
+    const rows = await getAllCompat(
+      `SELECT i.*, a.cv_doc_url, a.cv_pdf_url
+       FROM interviews i
+       LEFT JOIN applications a ON i.application_id = a.id
+       WHERE i.user_id = ? ${sqliteFilters}
+       ORDER BY
+         CASE WHEN i.interview_at IS NULL OR i.interview_at = '' THEN 1 ELSE 0 END,
+         i.interview_at ASC,
+         i.updated_at DESC`,
+      `SELECT i.*, a.cv_doc_url, a.cv_pdf_url
+       FROM interviews i
+       LEFT JOIN applications a ON i.application_id = a.id
+       WHERE i.user_id = $1 ${postgresFilters}
+       ORDER BY
+         CASE WHEN i.interview_at IS NULL THEN 1 ELSE 0 END,
+         i.interview_at ASC NULLS LAST,
+         i.updated_at DESC`,
+      params
+    );
+
+    res.json({
+      interviews: rows.map(formatInterview),
+      stages: STAGES,
+      platforms: [...PLATFORMS]
+    });
   } catch (error) {
     console.error('Interviews fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch interviews', details: error.message });
@@ -203,66 +201,77 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const {
-      parentId,
-      companyName,
-      jobTitle,
-      jdLink,
-      techStack,
-      applicationId,
-      resumeLabel,
-      step,
-      interviewDate,
-      meetingLink,
-      contact,
-      status,
-      notes
-    } = req.body;
+    const { applicationId, companyName } = req.body;
+    const app = await findLatestApplication(req.user.id, { applicationId, companyName });
 
-    let parent = null;
-    if (parentId) {
-      parent = await getOneCompat(
-        'SELECT id, company_name, jd_link, tech_stack, parent_id FROM interviews WHERE id = ? AND user_id = ?',
-        'SELECT id, company_name, jd_link, tech_stack, parent_id FROM interviews WHERE id = $1 AND user_id = $2',
-        [parentId, req.user.id]
-      );
-      if (!parent || parent.parent_id) {
-        return res.status(400).json({ error: 'Sub-items can only be added under a top-level company' });
-      }
+    if (!app) {
+      return res.status(404).json({ error: 'No application found for that company. Generate a CV first.' });
     }
 
-    const name = String(companyName || parent?.company_name || '').trim();
+    const name = prettyCompanyName(app.company_name);
     if (!name) {
-      return res.status(400).json({ error: 'Company name is required' });
+      return res.status(400).json({ error: 'Application is missing a company name' });
     }
 
-    if (step && !STEPS.has(step)) {
-      return res.status(400).json({ error: 'Invalid step' });
-    }
-    if (status && !STATUSES.has(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
+    const existing = await getOneCompat(
+      `SELECT id FROM interviews WHERE user_id = ? AND LOWER(company_name) = LOWER(?)`,
+      `SELECT id FROM interviews WHERE user_id = $1 AND LOWER(company_name) = LOWER($2)`,
+      [req.user.id, name]
+    );
+
+    if (existing) {
+      return res.status(409).json({
+        error: 'An interview for this company already exists.',
+        interviewId: existing.id
+      });
     }
 
-    const id = await insertInterview(req.user.id, {
-      parentId: parent ? parent.id : null,
-      companyName: name,
-      jobTitle,
-      jdLink: jdLink || parent?.jd_link || '',
-      techStack: techStack || parseTechStack(parent?.tech_stack),
-      applicationId,
-      resumeLabel,
-      step,
-      interviewDate,
-      meetingLink,
-      contact,
-      status: status || 'todo',
-      notes
-    });
+    const values = [
+      req.user.id,
+      app.id,
+      name,
+      app.job_title || '',
+      app.jd_link || '',
+      resumeLabelFromApp(app),
+      'hr_screen',
+      'upcoming',
+      null,
+      30,
+      'google_meet',
+      '',
+      '',
+      ''
+    ];
+
+    let id;
+    if (isPostgres) {
+      const result = await runQueryCompat(
+        '',
+        `INSERT INTO interviews
+          (user_id, application_id, company_name, job_title, jd_link, resume_label, stage, status, interview_at, duration_minutes, platform, call_link, interviewer, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         RETURNING id`,
+        values
+      );
+      id = result.rows?.[0]?.id;
+    } else {
+      const result = await runQueryCompat(
+        `INSERT INTO interviews
+          (user_id, application_id, company_name, job_title, jd_link, resume_label, stage, status, interview_at, duration_minutes, platform, call_link, interviewer, notes)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        '',
+        values
+      );
+      id = result.lastID;
+    }
 
     const created = await fetchInterview(id, req.user.id);
     res.status(201).json({ interview: formatInterview(created) });
   } catch (error) {
     console.error('Interview create error:', error);
+    if (String(error.message || '').toLowerCase().includes('unique')) {
+      return res.status(409).json({ error: 'An interview for this company already exists.' });
+    }
     res.status(500).json({ error: 'Failed to create interview', details: error.message });
   }
 });
@@ -280,53 +289,55 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
 
     const next = {
-      company_name: req.body.companyName ?? existing.company_name,
-      job_title: req.body.jobTitle ?? existing.job_title,
-      jd_link: req.body.jdLink ?? existing.jd_link,
-      tech_stack: req.body.techStack !== undefined ? serializeTechStack(req.body.techStack) : existing.tech_stack,
+      job_title: req.body.jobTitle !== undefined ? req.body.jobTitle : existing.job_title,
+      jd_link: req.body.jdLink !== undefined ? req.body.jdLink : existing.jd_link,
+      resume_label: req.body.resumeLabel !== undefined ? req.body.resumeLabel : existing.resume_label,
       application_id: req.body.applicationId !== undefined ? (req.body.applicationId || null) : existing.application_id,
-      resume_label: req.body.resumeLabel ?? existing.resume_label,
-      step: req.body.step !== undefined ? req.body.step : existing.step,
-      interview_date: req.body.interviewDate ?? existing.interview_date,
-      meeting_link: req.body.meetingLink ?? existing.meetingLink ?? existing.meeting_link,
-      contact: req.body.contact ?? existing.contact,
-      status: req.body.status ?? existing.status,
-      notes: req.body.notes ?? existing.notes
+      stage: req.body.stage !== undefined ? req.body.stage : existing.stage,
+      status: req.body.status !== undefined ? req.body.status : existing.status,
+      interview_at: req.body.interviewAt !== undefined ? (req.body.interviewAt || null) : existing.interview_at,
+      duration_minutes: req.body.durationMinutes !== undefined ? Number(req.body.durationMinutes) : existing.duration_minutes,
+      platform: req.body.platform !== undefined ? req.body.platform : existing.platform,
+      call_link: req.body.callLink !== undefined ? req.body.callLink : existing.call_link,
+      interviewer: req.body.interviewer !== undefined ? req.body.interviewer : existing.interviewer,
+      notes: req.body.notes !== undefined ? req.body.notes : existing.notes
     };
 
-    if (next.step && !STEPS.has(next.step)) {
-      return res.status(400).json({ error: 'Invalid step' });
+    if (next.stage && !STAGES.includes(next.stage)) {
+      return res.status(400).json({ error: 'Invalid stage' });
     }
     if (next.status && !STATUSES.has(next.status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
-    if (!String(next.company_name || '').trim()) {
-      return res.status(400).json({ error: 'Company name is required' });
+    if (next.platform && !PLATFORMS.has(next.platform)) {
+      return res.status(400).json({ error: 'Invalid platform' });
     }
 
     await runQueryCompat(
       `UPDATE interviews SET
-        company_name = ?, job_title = ?, jd_link = ?, tech_stack = ?, application_id = ?,
-        resume_label = ?, step = ?, interview_date = ?, meeting_link = ?, contact = ?,
-        status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+        job_title = ?, jd_link = ?, resume_label = ?, application_id = ?,
+        stage = ?, status = ?, interview_at = ?, duration_minutes = ?,
+        platform = ?, call_link = ?, interviewer = ?, notes = ?,
+        updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND user_id = ?`,
       `UPDATE interviews SET
-        company_name = $1, job_title = $2, jd_link = $3, tech_stack = $4, application_id = $5,
-        resume_label = $6, step = $7, interview_date = $8, meeting_link = $9, contact = $10,
-        status = $11, notes = $12, updated_at = CURRENT_TIMESTAMP
+        job_title = $1, jd_link = $2, resume_label = $3, application_id = $4,
+        stage = $5, status = $6, interview_at = $7, duration_minutes = $8,
+        platform = $9, call_link = $10, interviewer = $11, notes = $12,
+        updated_at = CURRENT_TIMESTAMP
        WHERE id = $13 AND user_id = $14`,
       [
-        next.company_name,
         next.job_title || '',
         next.jd_link || '',
-        next.tech_stack,
-        next.application_id,
         next.resume_label || '',
-        next.step || '',
-        next.interview_date || '',
-        next.meeting_link || '',
-        next.contact || '',
-        next.status || 'todo',
+        next.application_id,
+        next.stage || 'hr_screen',
+        next.status || 'upcoming',
+        next.interview_at,
+        Number.isFinite(next.duration_minutes) ? next.duration_minutes : 30,
+        next.platform || 'google_meet',
+        next.call_link || '',
+        next.interviewer || '',
         next.notes || '',
         req.params.id,
         req.user.id
@@ -338,6 +349,55 @@ router.put('/:id', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Interview update error:', error);
     res.status(500).json({ error: 'Failed to update interview', details: error.message });
+  }
+});
+
+router.post('/:id/progress', authMiddleware, async (req, res) => {
+  try {
+    const action = String(req.body.action || '');
+    const existing = await getOneCompat(
+      'SELECT * FROM interviews WHERE id = ? AND user_id = ?',
+      'SELECT * FROM interviews WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Interview not found' });
+    }
+
+    let stage = existing.stage || 'hr_screen';
+    let status = existing.status || 'upcoming';
+
+    if (action === 'complete') {
+      status = 'waiting_feedback';
+    } else if (action === 'reject') {
+      status = 'rejected';
+    } else if (action === 'next') {
+      const idx = STAGES.indexOf(stage);
+      if (idx < 0) {
+        stage = STAGES[0];
+        status = 'upcoming';
+      } else if (idx >= STAGES.length - 1) {
+        status = 'completed';
+      } else {
+        stage = STAGES[idx + 1];
+        status = 'upcoming';
+      }
+    } else {
+      return res.status(400).json({ error: 'Invalid action. Use complete, next, or reject.' });
+    }
+
+    await runQueryCompat(
+      `UPDATE interviews SET stage = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
+      `UPDATE interviews SET stage = $1, status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND user_id = $4`,
+      [stage, status, req.params.id, req.user.id]
+    );
+
+    const updated = await fetchInterview(req.params.id, req.user.id);
+    res.json({ interview: formatInterview(updated) });
+  } catch (error) {
+    console.error('Interview progress error:', error);
+    res.status(500).json({ error: 'Failed to update progress', details: error.message });
   }
 });
 
@@ -353,11 +413,6 @@ router.delete('/:id', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Interview not found' });
     }
 
-    await runQueryCompat(
-      'DELETE FROM interviews WHERE parent_id = ? AND user_id = ?',
-      'DELETE FROM interviews WHERE parent_id = $1 AND user_id = $2',
-      [req.params.id, req.user.id]
-    );
     await runQueryCompat(
       'DELETE FROM interviews WHERE id = ? AND user_id = ?',
       'DELETE FROM interviews WHERE id = $1 AND user_id = $2',

@@ -125,10 +125,11 @@ router.get('/check-duplicate', authMiddleware, async (req, res) => {
   }
 });
 
-// Distinct companies from the user's application history
+// Distinct companies from the user's application history (with latest bid details for Interviews)
 router.get('/companies', authMiddleware, async (req, res) => {
   try {
     const search = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const forInterview = req.query.forInterview === '1' || req.query.forInterview === 'true';
     const params = [req.user.id];
     let sqliteSearch = '';
     let postgresSearch = '';
@@ -164,18 +165,51 @@ router.get('/companies', authMiddleware, async (req, res) => {
     const now = Date.now();
     const windowMs = 30 * 24 * 60 * 60 * 1000;
 
-    res.json({
-      companies: companies.map((row) => {
-        const lastAppliedAt = row.last_applied_at;
-        const lastAppliedMs = lastAppliedAt ? new Date(lastAppliedAt).getTime() : 0;
-        return {
-          companyName: row.company_name,
-          lastAppliedAt,
-          applicationCount: Number(row.count) || 0,
-          isDuplicate: Boolean(lastAppliedMs && now - lastAppliedMs <= windowMs)
-        };
-      })
-    });
+    const interviewRows = forInterview
+      ? await getAllCompat(
+          `SELECT LOWER(company_name) as company_key FROM interviews WHERE user_id = ?`,
+          `SELECT LOWER(company_name) as company_key FROM interviews WHERE user_id = $1`,
+          [req.user.id]
+        ).catch(() => [])
+      : [];
+    const interviewSet = new Set(interviewRows.map((r) => r.company_key));
+
+    const detailed = await Promise.all(companies.map(async (row) => {
+      const lastAppliedAt = row.last_applied_at;
+      const lastAppliedMs = lastAppliedAt ? new Date(lastAppliedAt).getTime() : 0;
+      const base = {
+        companyName: row.company_name,
+        lastAppliedAt,
+        applicationCount: Number(row.count) || 0,
+        isDuplicate: Boolean(lastAppliedMs && now - lastAppliedMs <= windowMs),
+        alreadyInterviewing: interviewSet.has(String(row.company_name || '').toLowerCase())
+      };
+
+      if (!forInterview) return base;
+
+      const latest = await getOneCompat(
+        `SELECT id, job_title, company_name, jd_link, cv_doc_url, cv_pdf_url, applied_at
+         FROM applications
+         WHERE user_id = ? AND LOWER(company_name) = LOWER(?)
+         ORDER BY applied_at DESC LIMIT 1`,
+        `SELECT id, job_title, company_name, jd_link, cv_doc_url, cv_pdf_url, applied_at
+         FROM applications
+         WHERE user_id = $1 AND LOWER(company_name) = LOWER($2)
+         ORDER BY applied_at DESC LIMIT 1`,
+        [req.user.id, row.company_name]
+      );
+
+      return {
+        ...base,
+        applicationId: latest?.id || null,
+        jobTitle: latest?.job_title || '',
+        jdLink: latest?.jd_link || '',
+        cvDocUrl: latest?.cv_doc_url || null,
+        cvPdfUrl: latest?.cv_pdf_url || null
+      };
+    }));
+
+    res.json({ companies: detailed });
   } catch (error) {
     console.error('Companies fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch companies', details: error.message });
