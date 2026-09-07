@@ -53,6 +53,12 @@ temp/
 uploads/
 public/uploads/
 
+# Local SQLite databases (never commit)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
 # Package manager
 .pnpm-store/
 .yarn/

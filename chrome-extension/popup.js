@@ -20,10 +20,19 @@ function apiPath(path) {
 
 function resolveFileUrl(pathOrUrl) {
   if (!pathOrUrl) return '';
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-  const origin = getServerOrigin();
-  if (pathOrUrl.startsWith('/')) return `${origin}${pathOrUrl}`;
-  return `${origin}/uploads/${pathOrUrl}`;
+  let url;
+  if (/^https?:\/\//i.test(pathOrUrl)) {
+    url = pathOrUrl;
+  } else {
+    const origin = getServerOrigin();
+    url = pathOrUrl.startsWith('/') ? `${origin}${pathOrUrl}` : `${origin}/uploads/${pathOrUrl}`;
+  }
+  // Local /uploads require auth; append token for <a href> downloads
+  if (authToken && url.includes('/uploads/')) {
+    const sep = url.includes('?') ? '&' : '?';
+    url += `${sep}access_token=${encodeURIComponent(authToken)}`;
+  }
+  return url;
 }
 
 // Helper to sanitize filename

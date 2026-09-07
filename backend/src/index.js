@@ -3,6 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
+
+const { isOriginAllowed } = require('./config/env');
+const { mountProtectedUploads } = require('./middleware/protectedUploads');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -14,24 +18,20 @@ const { initDatabase, initAdminAccount, migrateExistingUsers } = require('./mode
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Ensure upload directories exist
 const uploadDir = path.join(__dirname, '..', 'uploads');
 const dataDir = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-// Middleware
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:5173',
   'http://localhost:5173',
   'http://localhost:3000'
-];
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (origin.startsWith('chrome-extension://')) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (isOriginAllowed(origin, allowedOrigins)) return callback(null, true);
     callback(new Error('CORS not allowed'));
   },
   credentials: true
@@ -39,50 +39,49 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Helper to sanitize and strip UUID from filename for download
-function getCleanDownloadFilename(filename) {
-  // Remove UUID pattern (e.g., John_Doe_Resume_a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf)
-  // UUID pattern: 8-4-4-4-12 hex characters
-  const uuidPattern = /_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i;
-  return filename.replace(uuidPattern, '');
-}
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many auth attempts, please try again later' }
+});
 
-// Static files for CV downloads with Content-Disposition header
-app.use('/uploads', (req, res, next) => {
-  const filename = path.basename(req.path);
-  const cleanFilename = getCleanDownloadFilename(filename);
-  res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"`);
-  next();
-}, express.static(uploadDir));
+const generateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many generate requests, please try again later' }
+});
 
-// Routes
-app.use('/api/auth', authRoutes);
+mountProtectedUploads(app);
+
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/applications', applicationRoutes);
+app.use('/api/cv/generate', generateLimiter);
 app.use('/api/cv', cvRoutes);
 app.use('/api/interviews', interviewRoutes);
 
-// Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('Error:', err.message);
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development'
+      ? (err.message || 'Internal server error')
+      : 'Internal server error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
-// Initialize database and start server
 initDatabase().then(async () => {
-  // Migrate existing users to active status
   await migrateExistingUsers();
-  // Initialize admin account
   await initAdminAccount();
-  
+
   app.listen(PORT, () => {
     console.log(`🚀 AI Resume Builder API running on port ${PORT}`);
   });

@@ -4,15 +4,17 @@
  */
 
 const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
 
 
-console.log("DATABASE_URL =", process.env.DATABASE_URL);
-// Database connection
+// Database connection (never log DATABASE_URL — it contains credentials)
+// Hosted Postgres often needs rejectUnauthorized:false unless you supply a CA.
+// Set DATABASE_SSL_REJECT_UNAUTHORIZED=true when you have a proper CA chain.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: 5,      
+  ssl: process.env.DATABASE_SSL === 'disable'
+    ? false
+    : { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true' },
+  max: 5,
   connectionTimeoutMillis: 10000,
 });
 
@@ -296,27 +298,9 @@ async function initDatabase() {
   }
 }
 
-// Initialize admin account
+// Admin bootstrap via env removed — promote a user to admin in the DB or app when needed
 async function initAdminAccount() {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-
-  const existing = await getOne(
-    'SELECT id FROM users WHERE email = $1',
-    [adminEmail]
-  );
-
-  if (!existing) {
-    const hashedPassword = await bcrypt.hash(adminPassword, 10);
-
-    await runQuery(
-      `INSERT INTO users (email, password, full_name, role, status)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [adminEmail, hashedPassword, 'Admin', 'admin', 'active']
-    );
-
-    console.log('✅ Admin account created');
-  }
+  return;
 }
 
 // Migrate existing users

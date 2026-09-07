@@ -1,6 +1,5 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const bcrypt = require('bcryptjs');
 
 const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '..', '..', 'data', 'resume_builder.db');
 let db;
@@ -8,6 +7,7 @@ let db;
 function getDb() {
   if (!db) {
     db = new sqlite3.Database(dbPath);
+    db.run('PRAGMA foreign_keys = ON');
   }
   return db;
 }
@@ -221,35 +221,9 @@ function getAll(sql, params = []) {
   });
 }
 
-// Initialize admin account
+// Admin bootstrap via env removed — promote a user to admin in the DB or app when needed
 async function initAdminAccount() {
-  try {
-    const adminEmail = 'Perfectdev0910@gmail.com';
-    const adminPassword = 'Betop2002)(!)';
-    
-    // Check if admin already exists
-    const existingAdmin = await getOne('SELECT id FROM users WHERE email = ?', [adminEmail]);
-    if (existingAdmin) {
-      // Update existing admin to ensure they have admin role and active status
-      await runQuery(
-        'UPDATE users SET role = ?, status = ? WHERE email = ?',
-        ['admin', 'active', adminEmail]
-      );
-      console.log('Admin account updated');
-      return;
-    }
-    
-    // Create admin account
-    const hashedPassword = await bcrypt.hash(adminPassword, 10);
-    await runQuery(
-      `INSERT INTO users (email, password, full_name, role, status, timezone)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [adminEmail, hashedPassword, 'Admin User', 'admin', 'active', 'UTC']
-    );
-    console.log('Admin account created successfully');
-  } catch (error) {
-    console.error('Error initializing admin account:', error);
-  }
+  return;
 }
 
 // Update existing users to have 'active' status if they don't have a status

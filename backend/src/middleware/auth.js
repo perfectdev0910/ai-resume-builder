@@ -1,11 +1,12 @@
 const jwt = require('jsonwebtoken');
+const { getJwtSecret } = require('../config/env');
 
 const isPostgres = !!process.env.DATABASE_URL;
 const db = isPostgres
   ? require('../models/database.postgres')
   : require('../models/database');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = getJwtSecret();
 
 function generateToken(user) {
   return jwt.sign(
@@ -42,15 +43,25 @@ async function getOneCompat(sqliteSql, postgresSql, params = []) {
   return db.getOne(sqliteSql, params);
 }
 
+function extractBearerOrQueryToken(req) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+  if (typeof req.query.access_token === 'string' && req.query.access_token) {
+    return req.query.access_token;
+  }
+  return null;
+}
+
 async function authMiddleware(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
+    const token = extractBearerOrQueryToken(req);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = verifyToken(token);
 
     const user = await getOneCompat(
@@ -80,7 +91,7 @@ async function authMiddleware(req, res, next) {
     req.user = user;
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    console.error('Auth middleware error:', error.message);
     return res.status(401).json({ error: 'Invalid token' });
   }
 }

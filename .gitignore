@@ -1,0 +1,12 @@
+# Root ignores for secrets and local DB artifacts
+.env
+.env.*
+!.env.example
+
+backend/data/
+backend/**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+node_modules/
+.DS_Store

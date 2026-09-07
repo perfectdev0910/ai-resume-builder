@@ -5,17 +5,18 @@
  */
 
 require('dotenv').config();
-const dns = require("dns");
-dns.setDefaultResultOrder("ipv4first");
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const cron = require('node-cron');
+const rateLimit = require('express-rate-limit');
 
+const { isOriginAllowed, isProduction } = require('./config/env');
+const { mountProtectedUploads } = require('./middleware/protectedUploads');
 
-// Choose database based on environment
-const db = process.env.DATABASE_URL 
-  ? require('./models/database.postgres') 
+const db = process.env.DATABASE_URL
+  ? require('./models/database.postgres')
   : require('./models/database');
 
 const authRoutes = require('./routes/auth');
@@ -28,33 +29,16 @@ const { cleanupOldFiles } = require('./jobs/cleanup');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS configuration for production
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  'chrome-extension://*',
   'http://localhost:5173',
   'http://localhost:3000'
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    
-    // Check if origin matches allowed patterns
-    const isAllowed = allowedOrigins.some(allowed => {
-      if (allowed.includes('*')) {
-        const pattern = new RegExp(allowed.replace('*', '.*'));
-        return pattern.test(origin);
-      }
-      return allowed === origin;
-    });
-    
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS not allowed'));
-    }
+    if (isOriginAllowed(origin, allowedOrigins)) return callback(null, true);
+    callback(new Error('CORS not allowed'));
   },
   credentials: true
 }));
@@ -62,78 +46,87 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    storage: process.env.STORAGE_PROVIDER || 'supabase'
-  });
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many auth attempts, please try again later' }
 });
 
-// Cleanup endpoint (can be triggered by external cron service)
+const generateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many generate requests, please try again later' }
+});
+
+mountProtectedUploads(app);
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 app.post('/api/cleanup', async (req, res) => {
-  const authHeader = req.headers.authorization;
   const cleanupSecret = process.env.CLEANUP_SECRET;
-  
-  // Verify cleanup secret if configured
-  if (cleanupSecret && authHeader !== `Bearer ${cleanupSecret}`) {
+  const authHeader = req.headers.authorization;
+
+  if (!cleanupSecret || authHeader !== `Bearer ${cleanupSecret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  
+
   try {
     const result = await cleanupOldFiles();
     res.json({ success: true, ...result });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Cleanup error:', error.message);
+    res.status(500).json({ error: 'Cleanup failed' });
   }
 });
 
-// API Routes
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/applications', applicationRoutes);
+app.use('/api/cv/generate', generateLimiter);
 app.use('/api/cv', cvRoutes);
 app.use('/api/interviews', interviewRoutes);
 
-// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-
+  console.error('Error:', err.message);
   console.log(`${req.method} ${req.originalUrl}`, {
-    origin: req.headers.origin,
-    body: req.body
+    origin: req.headers.origin
   });
   if (res.headersSent) {
     return next(err);
   }
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    error: isProduction() ? 'Internal server error' : (err.message || 'Internal server error'),
+    ...(!isProduction() && { stack: err.stack })
   });
 });
 
-// Initialize database and start server
 async function startServer() {
   try {
+    // Fail closed on missing JWT in production
+    require('./config/env').getJwtSecret();
+
     await db.initDatabase();
     await db.migrateExistingUsers();
     await db.initAdminAccount();
-    
-    // Schedule cleanup job (runs daily at 2 AM)
+
     if (process.env.ENABLE_CRON_CLEANUP === 'true') {
       cron.schedule('0 2 * * *', async () => {
         console.log('Running scheduled cleanup...');
         try {
           await cleanupOldFiles();
         } catch (err) {
-          console.error('Scheduled cleanup failed:', err);
+          console.error('Scheduled cleanup failed:', err.message);
         }
       });
       console.log('📅 Cleanup cron job scheduled (daily at 2 AM)');
     }
-    
+
     app.listen(PORT, () => {
       console.log(`🚀 AI Resume Builder API running on port ${PORT}`);
       console.log(`📦 Storage provider: ${process.env.STORAGE_PROVIDER || 'supabase'}`);

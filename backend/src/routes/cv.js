@@ -467,6 +467,28 @@ function resolveStoredFile(application, ...keys) {
   return null;
 }
 
+const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
+
+function sendStoredDownload(res, fileUrl, downloadFilename) {
+  if (!fileUrl) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+
+  if (/^https?:\/\//i.test(fileUrl)) {
+    return res.redirect(fileUrl);
+  }
+
+  const filename = path.basename(fileUrl);
+  const filepath = path.join(UPLOAD_DIR, filename);
+  return res.sendFile(filepath, (err) => {
+    if (err && !res.headersSent) {
+      res.status(404).json({ error: 'File not found' });
+    }
+  });
+}
+
 // Download CV as DOCX
 router.get('/download/docx/:applicationId', authMiddleware, async (req, res) => {
   try {
@@ -492,9 +514,7 @@ router.get('/download/docx/:applicationId', authMiddleware, async (req, res) => 
     }
 
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Resume.docx`;
-
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(fileUrl);
+    return sendStoredDownload(res, fileUrl, downloadFilename);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -526,9 +546,7 @@ router.get('/download/pdf/:applicationId', authMiddleware, async (req, res) => {
     }
 
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Resume.pdf`;
-
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(fileUrl);
+    return sendStoredDownload(res, fileUrl, downloadFilename);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -556,9 +574,7 @@ router.get('/download/cover-letter/docx/:applicationId', authMiddleware, async (
     );
 
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Cover_Letter.docx`;
-
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(fileUrl);
+    return sendStoredDownload(res, fileUrl, downloadFilename);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -586,9 +602,7 @@ router.get('/download/cover-letter/pdf/:applicationId', authMiddleware, async (r
     );
 
     const downloadFilename = `${sanitizeDownloadFilename(user.full_name)}_Cover_Letter.pdf`;
-
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
-    res.redirect(fileUrl);
+    return sendStoredDownload(res, fileUrl, downloadFilename);
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });

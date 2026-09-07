@@ -10,6 +10,8 @@ const db = isPostgres
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 const { prettyCompanyName } = require('../utils/companyName');
 const { resolveTimeZone, sqlUtc, getPeriodRange, localDateKey } = require('../utils/timezone');
+const { clampLimit } = require('../config/env');
+const storage = require('../services/storage');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
@@ -84,15 +86,39 @@ async function runQueryCompat(sqliteSql, postgresSql, params = []) {
   return db.runQuery(sqliteSql, params);
 }
 
-// Helper to delete a file if it exists
-async function deleteFileIfExists(filename) {
-  if (!filename) return;
+// Helper to delete a stored file (local path or cloud URL/key)
+async function deleteFileIfExists(stored) {
+  if (!stored) return;
   try {
+    if (/^https?:\/\//i.test(stored)) {
+      let storagePath = stored;
+      try {
+        const u = new URL(stored);
+        const marker = '/uploads/';
+        const idx = u.pathname.indexOf(marker);
+        storagePath = idx >= 0
+          ? u.pathname.slice(idx + 1)
+          : path.basename(u.pathname);
+      } catch {
+        storagePath = path.basename(stored);
+      }
+      if (storage && typeof storage.deleteFile === 'function') {
+        await storage.deleteFile(storagePath);
+      }
+      return;
+    }
+
+    if (String(stored).includes('uploads/') && storage && typeof storage.deleteFile === 'function' && process.env.STORAGE_PROVIDER) {
+      await storage.deleteFile(stored.startsWith('uploads/') ? stored : `uploads/${path.basename(stored)}`);
+      return;
+    }
+
+    const filename = path.basename(String(stored));
     const filepath = path.join(UPLOAD_DIR, filename);
     await fs.unlink(filepath);
   } catch (err) {
     if (err.code !== 'ENOENT') {
-      console.error(`Failed to delete file ${filename}:`, err);
+      console.error(`Failed to delete file ${stored}:`, err.message);
     }
   }
 }
@@ -220,8 +246,8 @@ router.get('/companies', authMiddleware, async (req, res) => {
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { period, startDate, endDate, page = 1, limit = 20, search } = req.query;
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = clampLimit(limit, 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
     let sqliteDateFilter = '';
@@ -525,8 +551,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 router.get('/admin/all', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { page = 1, limit = 50 } = req.query;
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = clampLimit(limit, 50, 100);
     const offset = (pageNum - 1) * limitNum;
 
     let applications;

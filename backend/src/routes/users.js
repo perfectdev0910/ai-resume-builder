@@ -8,6 +8,7 @@ const db = isPostgres
 
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 const { resolveTimeZone, getPeriodRange, sqlUtc } = require('../utils/timezone');
+const { clampLimit } = require('../config/env');
 
 const router = express.Router();
 
@@ -1121,8 +1122,8 @@ router.get('/admin/stats', authMiddleware, adminMiddleware, async (req, res) => 
 router.get('/admin/applications', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { period = 'all', userId, page = 1, limit = 20 } = req.query;
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = clampLimit(limit, 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
     const params = [];

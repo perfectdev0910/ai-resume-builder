@@ -83,11 +83,11 @@ async function fetchInterview(id, userId) {
   return getOneCompat(
     `SELECT i.*, a.cv_doc_url, a.cv_pdf_url
      FROM interviews i
-     LEFT JOIN applications a ON i.application_id = a.id
+     LEFT JOIN applications a ON i.application_id = a.id AND a.user_id = i.user_id
      WHERE i.id = ? AND i.user_id = ?`,
     `SELECT i.*, a.cv_doc_url, a.cv_pdf_url
      FROM interviews i
-     LEFT JOIN applications a ON i.application_id = a.id
+     LEFT JOIN applications a ON i.application_id = a.id AND a.user_id = i.user_id
      WHERE i.id = $1 AND i.user_id = $2`,
     [id, userId]
   );
@@ -171,7 +171,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const rows = await getAllCompat(
       `SELECT i.*, a.cv_doc_url, a.cv_pdf_url
        FROM interviews i
-       LEFT JOIN applications a ON i.application_id = a.id
+       LEFT JOIN applications a ON i.application_id = a.id AND a.user_id = i.user_id
        WHERE i.user_id = ? ${sqliteFilters}
        ORDER BY
          CASE WHEN i.interview_at IS NULL OR i.interview_at = '' THEN 1 ELSE 0 END,
@@ -179,7 +179,7 @@ router.get('/', authMiddleware, async (req, res) => {
          i.updated_at DESC`,
       `SELECT i.*, a.cv_doc_url, a.cv_pdf_url
        FROM interviews i
-       LEFT JOIN applications a ON i.application_id = a.id
+       LEFT JOIN applications a ON i.application_id = a.id AND a.user_id = i.user_id
        WHERE i.user_id = $1 ${postgresFilters}
        ORDER BY
          CASE WHEN i.interview_at IS NULL THEN 1 ELSE 0 END,
@@ -311,6 +311,15 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
     if (next.platform && !PLATFORMS.has(next.platform)) {
       return res.status(400).json({ error: 'Invalid platform' });
+    }
+
+    if (req.body.applicationId !== undefined && next.application_id) {
+      const ownedApp = await findLatestApplication(req.user.id, {
+        applicationId: next.application_id
+      });
+      if (!ownedApp) {
+        return res.status(403).json({ error: 'Application not found or access denied' });
+      }
     }
 
     await runQueryCompat(
