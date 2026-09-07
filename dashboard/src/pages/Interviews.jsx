@@ -55,7 +55,19 @@ function localInputsToIso(date, time, timeZone) {
 }
 
 function resumeHref(item) {
-  return item.resumePdfUrl || item.resumeDocUrl || null;
+  const raw = item.resumePdfUrl || item.resumeDocUrl || null;
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  const origin = apiBase.replace(/\/api$/, '') || '';
+  let url = raw.startsWith('/') ? `${origin}${raw}` : `${origin}/uploads/${raw}`;
+
+  const token = localStorage.getItem('authToken');
+  if (token && url.includes('/uploads/')) {
+    url += `${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
+  }
+  return url || raw;
 }
 
 export default function Interviews() {

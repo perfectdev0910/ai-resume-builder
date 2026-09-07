@@ -276,25 +276,6 @@ export default function Generate() {
       {/* Input Form */}
       {!result && (
         <div className="card p-6 space-y-4">
-          <div>
-            <label className="label">Job Description *</label>
-            <textarea
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              className="input"
-              rows="12"
-              placeholder="Paste the complete job description here...
-
-Include:
-• Job title and company
-• Responsibilities
-• Required qualifications
-• Preferred skills
-• Any other relevant details"
-              disabled={loading}
-            />
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <CompanySearch
               value={companyName}
@@ -312,6 +293,25 @@ Include:
                 disabled={loading}
               />
             </div>
+          </div>
+
+          <div>
+            <label className="label">Job Description *</label>
+            <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              className="input"
+              rows="12"
+              placeholder="Paste the complete job description here...
+
+Include:
+• Job title and company
+• Responsibilities
+• Required qualifications
+• Preferred skills
+• Any other relevant details"
+              disabled={loading}
+            />
           </div>
 
           <div className="flex gap-3 pt-2">
