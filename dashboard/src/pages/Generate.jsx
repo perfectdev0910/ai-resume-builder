@@ -181,7 +181,16 @@ export default function Generate() {
               You have already applied to <strong>{prettyCompanyName(companyName)}</strong> in the last 30 days. Are you sure you want to proceed?
             </p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowDuplicateModal(false)} className="btn btn-secondary">
+              <button
+                onClick={() => {
+                  setShowDuplicateModal(false);
+                  setJobDescription('');
+                  setJdLink('');
+                  setCompanyName('');
+                  setError('');
+                }}
+                className="btn btn-secondary"
+              >
                 Cancel
               </button>
               <button onClick={() => handleGenerate(true)} className="btn btn-primary">
