@@ -112,6 +112,9 @@ async function startServer() {
     require('./config/env').getJwtSecret();
 
     await db.initDatabase();
+    if (typeof db.ensureInterviewsTable === 'function') {
+      await db.ensureInterviewsTable();
+    }
     await db.migrateExistingUsers();
     await db.initAdminAccount();
 

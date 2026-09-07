@@ -79,8 +79,12 @@ app.use((err, req, res, next) => {
 });
 
 initDatabase().then(async () => {
+  const { ensureInterviewsTable } = require('./models/database');
   await migrateExistingUsers();
   await initAdminAccount();
+  if (typeof ensureInterviewsTable === 'function') {
+    await ensureInterviewsTable();
+  }
 
   app.listen(PORT, () => {
     console.log(`🚀 AI Resume Builder API running on port ${PORT}`);

@@ -244,58 +244,84 @@ async function initDatabase() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_user_id ON interviews(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status)`);
 
-    // Data migrations for old column names -> new ones
-    await client.query(`
-      UPDATE employment_history
-      SET company = company_name
-      WHERE company IS NULL AND company_name IS NOT NULL
-    `).catch(() => {});
+    // Data migrations for old column names -> new ones (outside any txn; ignore missing columns)
+    const optionalMigrations = [
+      `UPDATE employment_history SET company = company_name WHERE company IS NULL AND company_name IS NOT NULL`,
+      `UPDATE employment_history SET position = job_title WHERE position IS NULL AND job_title IS NOT NULL`,
+      `UPDATE employment_history SET description = responsibilities WHERE description IS NULL AND responsibilities IS NOT NULL`,
+      `UPDATE certifications SET date_obtained = issue_date WHERE date_obtained IS NULL AND issue_date IS NOT NULL`,
+      `UPDATE certifications SET credly_link = credential_url WHERE credly_link IS NULL AND credential_url IS NOT NULL`,
+      `UPDATE additional_info SET category = info_type WHERE category IS NULL AND info_type IS NOT NULL`,
+      `UPDATE additional_info SET content = info_value WHERE content IS NULL AND info_value IS NOT NULL`
+    ];
+    for (const sql of optionalMigrations) {
+      try {
+        await client.query(sql);
+      } catch {
+        // Column may not exist on fresh schemas
+      }
+    }
 
-    await client.query(`
-      UPDATE employment_history
-      SET position = job_title
-      WHERE position IS NULL AND job_title IS NOT NULL
-    `).catch(() => {});
-
-    await client.query(`
-      UPDATE employment_history
-      SET description = responsibilities
-      WHERE description IS NULL AND responsibilities IS NOT NULL
-    `).catch(() => {});
-
-    await client.query(`
-      UPDATE certifications
-      SET date_obtained = issue_date
-      WHERE date_obtained IS NULL AND issue_date IS NOT NULL
-    `).catch(() => {});
-
-    await client.query(`
-      UPDATE certifications
-      SET credly_link = credential_url
-      WHERE credly_link IS NULL AND credential_url IS NOT NULL
-    `).catch(() => {});
-
-    await client.query(`
-      UPDATE additional_info
-      SET category = info_type
-      WHERE category IS NULL AND info_type IS NOT NULL
-    `).catch(() => {});
-
-    await client.query(`
-      UPDATE additional_info
-      SET content = info_value
-      WHERE content IS NULL AND info_value IS NOT NULL
-    `).catch(() => {});
-
-    await client.query('COMMIT');
     console.log('✅ PostgreSQL database initialized');
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('❌ PostgreSQL init failed:', error);
     throw error;
   } finally {
-    client.release();
+    if (client) client.release();
   }
+}
+
+async function ensureInterviewsTable() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS interviews (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
+        company_name VARCHAR(255) NOT NULL,
+        job_title VARCHAR(255),
+        jd_link TEXT,
+        resume_label VARCHAR(255),
+        stage VARCHAR(50) DEFAULT 'hr_screen',
+        status VARCHAR(50) DEFAULT 'upcoming',
+        interview_at TIMESTAMPTZ,
+        duration_minutes INTEGER DEFAULT 30,
+        platform VARCHAR(50) DEFAULT 'google_meet',
+        call_link TEXT,
+        interviewer TEXT,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, company_name)
+      )
+    `);
+  } catch (error) {
+    // Older DBs / permission quirks: create without FKs
+    await query(`
+      CREATE TABLE IF NOT EXISTS interviews (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        application_id INTEGER,
+        company_name VARCHAR(255) NOT NULL,
+        job_title VARCHAR(255),
+        jd_link TEXT,
+        resume_label VARCHAR(255),
+        stage VARCHAR(50) DEFAULT 'hr_screen',
+        status VARCHAR(50) DEFAULT 'upcoming',
+        interview_at TIMESTAMPTZ,
+        duration_minutes INTEGER DEFAULT 30,
+        platform VARCHAR(50) DEFAULT 'google_meet',
+        call_link TEXT,
+        interviewer TEXT,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.warn('Interviews table ensured without FK constraints:', error.message);
+  }
+  await query(`CREATE INDEX IF NOT EXISTS idx_interviews_user_id ON interviews(user_id)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status)`).catch(() => {});
 }
 
 // Admin bootstrap via env removed — promote a user to admin in the DB or app when needed
@@ -353,5 +379,6 @@ module.exports = {
   initDatabase,
   initAdminAccount,
   migrateExistingUsers,
-  cleanupOldApplications
+  cleanupOldApplications,
+  ensureInterviewsTable
 };

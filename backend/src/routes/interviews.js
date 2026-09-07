@@ -21,7 +21,30 @@ const STAGES = [
 
 const STATUSES = new Set(['upcoming', 'waiting_feedback', 'completed', 'rejected']);
 const PLATFORMS = new Set(['google_meet', 'zoom', 'teams', 'phone', 'other']);
-const COMPLETED_STATUSES = new Set(['completed', 'waiting_feedback', 'rejected']);
+
+let interviewsReady = null;
+async function ensureReady() {
+  if (!interviewsReady) {
+    interviewsReady = (typeof db.ensureInterviewsTable === 'function'
+      ? db.ensureInterviewsTable()
+      : Promise.resolve()
+    ).catch((err) => {
+      interviewsReady = null;
+      throw err;
+    });
+  }
+  return interviewsReady;
+}
+
+router.use(async (req, res, next) => {
+  try {
+    await ensureReady();
+    next();
+  } catch (error) {
+    console.error('Interviews schema error:', error);
+    res.status(500).json({ error: 'Interviews storage is not available', details: error.message });
+  }
+});
 
 async function getOneCompat(sqliteSql, postgresSql, params = []) {
   if (isPostgres) {
@@ -54,6 +77,7 @@ function publicFileUrl(stored) {
 }
 
 function formatInterview(row) {
+  if (!row) return null;
   const stageIndex = Math.max(0, STAGES.indexOf(row.stage));
   return {
     id: row.id,
@@ -253,7 +277,7 @@ router.post('/', authMiddleware, async (req, res) => {
          RETURNING id`,
         values
       );
-      id = result.rows?.[0]?.id;
+      id = result?.rows?.[0]?.id ?? result?.[0]?.id;
     } else {
       const result = await runQueryCompat(
         `INSERT INTO interviews
@@ -265,7 +289,14 @@ router.post('/', authMiddleware, async (req, res) => {
       id = result.lastID;
     }
 
+    if (!id) {
+      throw new Error('Interview insert did not return an id');
+    }
+
     const created = await fetchInterview(id, req.user.id);
+    if (!created) {
+      throw new Error('Interview was created but could not be loaded');
+    }
     res.status(201).json({ interview: formatInterview(created) });
   } catch (error) {
     console.error('Interview create error:', error);
