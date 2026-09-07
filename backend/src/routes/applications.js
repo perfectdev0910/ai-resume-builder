@@ -175,7 +175,7 @@ router.get('/companies', authMiddleware, async (req, res) => {
          ${sqliteSearch}
        GROUP BY LOWER(company_name)
        ORDER BY last_applied_at DESC
-       LIMIT 100`,
+       LIMIT ${search ? 200 : 500}`,
       `SELECT MIN(company_name) as company_name, MAX(applied_at) as last_applied_at, COUNT(*)::int as count
        FROM applications
        WHERE user_id = $1
@@ -184,7 +184,7 @@ router.get('/companies', authMiddleware, async (req, res) => {
          ${postgresSearch}
        GROUP BY LOWER(company_name)
        ORDER BY last_applied_at DESC
-       LIMIT 100`,
+       LIMIT ${search ? 200 : 500}`,
       params
     );
 

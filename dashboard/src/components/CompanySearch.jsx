@@ -31,21 +31,64 @@ function formatAppliedAt(value) {
 
 export default function CompanySearch({ value, onChange, disabled }) {
   const [companies, setCompanies] = useState([]);
+  const [duplicateInfo, setDuplicateInfo] = useState(null);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const wrapRef = useRef(null);
+  const searchSeq = useRef(0);
+  const dupSeq = useRef(0);
 
+  // Load / search companies from the server as the user types (not only top recent)
   useEffect(() => {
-    let cancelled = false;
-    applicationsAPI.getCompanies()
-      .then((response) => {
-        if (!cancelled) setCompanies(response.data?.companies || []);
-      })
-      .catch(() => {
-        if (!cancelled) setCompanies([]);
-      });
-    return () => { cancelled = true; };
-  }, []);
+    const q = value.trim();
+    const seq = ++searchSeq.current;
+    const timer = setTimeout(() => {
+      applicationsAPI.getCompanies(q)
+        .then((response) => {
+          if (seq !== searchSeq.current) return;
+          setCompanies(response.data?.companies || []);
+        })
+        .catch(() => {
+          if (seq !== searchSeq.current) return;
+          setCompanies([]);
+        });
+    }, q ? 200 : 0);
+
+    return () => clearTimeout(timer);
+  }, [value]);
+
+  // Exact duplicate check against all applications (same rule as Generate)
+  useEffect(() => {
+    const name = prettyCompanyName(value);
+    if (!name) {
+      setDuplicateInfo(null);
+      return undefined;
+    }
+
+    const seq = ++dupSeq.current;
+    const timer = setTimeout(() => {
+      applicationsAPI.checkDuplicate(name)
+        .then((response) => {
+          if (seq !== dupSeq.current) return;
+          const isDuplicate = Boolean(response.data?.isDuplicate);
+          const fromList = companies.find(
+            (c) => c.companyName.toLowerCase() === name.toLowerCase()
+          );
+          setDuplicateInfo({
+            companyName: fromList?.companyName || name,
+            isDuplicate,
+            lastAppliedAt: fromList?.lastAppliedAt || null,
+            applicationCount: fromList?.applicationCount || (isDuplicate ? 1 : 0)
+          });
+        })
+        .catch(() => {
+          if (seq !== dupSeq.current) return;
+          setDuplicateInfo(null);
+        });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [value, companies]);
 
   useEffect(() => {
     const onDocMouseDown = (event) => {
@@ -58,23 +101,18 @@ export default function CompanySearch({ value, onChange, disabled }) {
   const query = value.trim().toLowerCase();
 
   const matches = useMemo(() => {
-    if (!query) return companies.slice(0, 8);
-    return companies
-      .filter((company) => company.companyName.toLowerCase().includes(query))
-      .sort((a, b) => {
-        const aStarts = a.companyName.toLowerCase().startsWith(query) ? 0 : 1;
-        const bStarts = b.companyName.toLowerCase().startsWith(query) ? 0 : 1;
-        if (aStarts !== bStarts) return aStarts - bStarts;
-        return new Date(b.lastAppliedAt || 0) - new Date(a.lastAppliedAt || 0);
-      })
-      .slice(0, 8);
+    const list = !query
+      ? companies
+      : companies
+          .filter((company) => company.companyName.toLowerCase().includes(query))
+          .sort((a, b) => {
+            const aStarts = a.companyName.toLowerCase().startsWith(query) ? 0 : 1;
+            const bStarts = b.companyName.toLowerCase().startsWith(query) ? 0 : 1;
+            if (aStarts !== bStarts) return aStarts - bStarts;
+            return new Date(b.lastAppliedAt || 0) - new Date(a.lastAppliedAt || 0);
+          });
+    return list.slice(0, 50);
   }, [companies, query]);
-
-  const exactMatch = useMemo(() => {
-    const normalized = prettyCompanyName(value).toLowerCase();
-    if (!normalized) return null;
-    return companies.find((company) => company.companyName.toLowerCase() === normalized) || null;
-  }, [companies, value]);
 
   const selectCompany = (company) => {
     onChange(company.companyName);
@@ -129,7 +167,7 @@ export default function CompanySearch({ value, onChange, disabled }) {
       />
 
       {open && matches.length > 0 && (
-        <ul className="absolute z-20 mt-1 w-full max-h-64 overflow-auto bg-white border border-gray-200 rounded-lg">
+        <ul className="absolute z-20 mt-1 w-full max-h-64 overflow-auto bg-white border border-gray-200 rounded-lg dark:bg-gray-900 dark:border-gray-700">
           {matches.map((company, index) => (
             <li key={company.companyName.toLowerCase()}>
               <button
@@ -137,13 +175,15 @@ export default function CompanySearch({ value, onChange, disabled }) {
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => selectCompany(company)}
                 className={`w-full text-left px-3 py-2 ${
-                  index === highlight ? 'bg-primary-50' : 'hover:bg-gray-50'
+                  index === highlight
+                    ? 'bg-primary-50 dark:bg-primary-900/30'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-gray-900">{company.companyName}</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{company.companyName}</span>
                   {company.isDuplicate && (
-                    <span className="shrink-0 text-xs font-medium text-yellow-800 bg-yellow-100 px-2 py-0.5 rounded">
+                    <span className="shrink-0 text-xs font-medium text-yellow-800 bg-yellow-100 px-2 py-0.5 rounded dark:text-yellow-200 dark:bg-yellow-900/40">
                       Last 30 days
                     </span>
                   )}
@@ -158,19 +198,19 @@ export default function CompanySearch({ value, onChange, disabled }) {
         </ul>
       )}
 
-      {exactMatch?.isDuplicate && (
-        <p className="text-sm text-yellow-800 mt-2">
-          You already applied to <strong>{exactMatch.companyName}</strong> in the last 30 days
-          {formatAppliedAt(exactMatch.lastAppliedAt) ? ` (${formatAppliedAt(exactMatch.lastAppliedAt)})` : ''}.
+      {duplicateInfo?.isDuplicate && (
+        <p className="text-sm text-yellow-800 mt-2 dark:text-yellow-200">
+          You already applied to <strong>{duplicateInfo.companyName}</strong> in the last 30 days
+          {formatAppliedAt(duplicateInfo.lastAppliedAt) ? ` (${formatAppliedAt(duplicateInfo.lastAppliedAt)})` : ''}.
         </p>
       )}
-      {exactMatch && !exactMatch.isDuplicate && (
+      {duplicateInfo && !duplicateInfo.isDuplicate && duplicateInfo.applicationCount > 0 && (
         <p className="text-xs text-gray-500 mt-2">
-          Previous application{exactMatch.applicationCount > 1 ? 's' : ''} to this company
-          {formatAppliedAt(exactMatch.lastAppliedAt) ? ` · last ${formatAppliedAt(exactMatch.lastAppliedAt)}` : ''}.
+          Previous application{duplicateInfo.applicationCount > 1 ? 's' : ''} to this company
+          {formatAppliedAt(duplicateInfo.lastAppliedAt) ? ` · last ${formatAppliedAt(duplicateInfo.lastAppliedAt)}` : ''}.
         </p>
       )}
-      {!exactMatch && (
+      {!duplicateInfo?.isDuplicate && !(duplicateInfo?.applicationCount > 0) && (
         <p className="text-xs text-gray-500 mt-1">Type to search past companies. New names can still be entered.</p>
       )}
     </div>
