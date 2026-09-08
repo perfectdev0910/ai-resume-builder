@@ -296,7 +296,6 @@ async function ensureInterviewsTable() {
       )
     `);
   } catch (error) {
-    // Older DBs / permission quirks: create without FKs
     await query(`
       CREATE TABLE IF NOT EXISTS interviews (
         id SERIAL PRIMARY KEY,
@@ -320,6 +319,38 @@ async function ensureInterviewsTable() {
     `);
     console.warn('Interviews table ensured without FK constraints:', error.message);
   }
+
+  // Upgrade older interviews tables that were created without these columns
+  const columnMigrations = [
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS application_id INTEGER`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS job_title VARCHAR(255)`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS jd_link TEXT`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS resume_label VARCHAR(255)`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS stage VARCHAR(50) DEFAULT 'hr_screen'`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'upcoming'`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS interview_at TIMESTAMPTZ`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 30`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT 'google_meet'`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS call_link TEXT`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS interviewer TEXT`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS notes TEXT`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+  ];
+
+  for (const sql of columnMigrations) {
+    try {
+      await query(sql);
+    } catch (err) {
+      console.warn('Interviews column migration skipped:', err.message);
+    }
+  }
+
+  await query(`UPDATE interviews SET stage = 'hr_screen' WHERE stage IS NULL`).catch(() => {});
+  await query(`UPDATE interviews SET status = 'upcoming' WHERE status IS NULL`).catch(() => {});
+  await query(`UPDATE interviews SET duration_minutes = 30 WHERE duration_minutes IS NULL`).catch(() => {});
+  await query(`UPDATE interviews SET platform = 'google_meet' WHERE platform IS NULL`).catch(() => {});
+
   await query(`CREATE INDEX IF NOT EXISTS idx_interviews_user_id ON interviews(user_id)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status)`).catch(() => {});
 }

@@ -228,7 +228,8 @@ async function initAdminAccount() {
 
 function ensureInterviewsTable() {
   return new Promise((resolve, reject) => {
-    getDb().run(
+    const database = getDb();
+    database.run(
       `CREATE TABLE IF NOT EXISTS interviews (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
@@ -251,7 +252,34 @@ function ensureInterviewsTable() {
         FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL,
         UNIQUE(user_id, company_name)
       )`,
-      (err) => (err ? reject(err) : resolve())
+      (createErr) => {
+        if (createErr) return reject(createErr);
+
+        const columns = [
+          'application_id INTEGER',
+          'job_title TEXT',
+          'jd_link TEXT',
+          'resume_label TEXT',
+          "stage TEXT DEFAULT 'hr_screen'",
+          "status TEXT DEFAULT 'upcoming'",
+          'interview_at TEXT',
+          'duration_minutes INTEGER DEFAULT 30',
+          "platform TEXT DEFAULT 'google_meet'",
+          'call_link TEXT',
+          'interviewer TEXT',
+          'notes TEXT',
+          'created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+          'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
+        ];
+
+        let i = 0;
+        const next = () => {
+          if (i >= columns.length) return resolve();
+          const col = columns[i++];
+          database.run(`ALTER TABLE interviews ADD COLUMN ${col}`, () => next());
+        };
+        next();
+      }
     );
   });
 }

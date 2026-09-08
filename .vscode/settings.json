@@ -1,4 +1,8 @@
 {
+  // This machine has no outbound network, so VS Code cannot fetch JSON schemas
+  // (schemastore.org). Turning the download off removes the false "problem" on
+  // package.json; JSON syntax checking still works.
+  "json.schemaDownload.enable": false,
   "css.lint.unknownAtRules": "ignore",
   "files.associations": {
     "*.css": "tailwindcss"

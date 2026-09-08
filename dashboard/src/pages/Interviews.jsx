@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { applicationsAPI, interviewsAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { formatInTimeZone, resolveTimeZone } from '../utils/timezone';
@@ -184,12 +184,12 @@ export default function Interviews() {
       setLoading(false);
     }
 
-    // Then refresh from server with explicit All-tab params (avoid stale tab/search)
-    setLoading(true);
+    // Then refresh from server with explicit All-tab params (avoid stale tab/search).
+    // No spinner here: the optimistic row must stay on screen while this runs.
     await load({ tab: 'all', stage: '', search: '', selectId: interview?.id });
   };
 
-  if (loading) {
+  if (loading && !showAdd) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500" />
@@ -539,34 +539,50 @@ function InterviewDetailPanel({ item, timeZone, stages, saving, onSave, onProgre
 function AddInterviewModal({ onClose, onCreated, onError }) {
   const [q, setQ] = useState('');
   const [companies, setCompanies] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [modalError, setModalError] = useState('');
+  const searchSeq = useRef(0);
 
+  // Keep the previous results on screen while a new search runs. Swapping the list
+  // out mid-search removes the row the user is clicking, and the click never lands.
   const fetchCompanies = async (query = '') => {
-    setLoading(true);
+    const seq = ++searchSeq.current;
+    setSearching(true);
     try {
       const res = await applicationsAPI.getCompanies(query, { forInterview: true });
+      if (seq !== searchSeq.current) return;
       setCompanies(res.data?.companies || []);
+      setModalError('');
     } catch (err) {
-      onError(err.response?.data?.error || 'Failed to load companies');
+      if (seq !== searchSeq.current) return;
+      setModalError(err.response?.data?.error || 'Failed to load companies');
     } finally {
-      setLoading(false);
+      if (seq === searchSeq.current) {
+        setSearching(false);
+        setLoaded(true);
+      }
     }
   };
 
   useEffect(() => {
-    fetchCompanies('');
-  }, []);
-
-  useEffect(() => {
-    const id = setTimeout(() => fetchCompanies(q), 250);
+    const id = setTimeout(() => fetchCompanies(q), q ? 250 : 0);
     return () => clearTimeout(id);
   }, [q]);
 
   const available = companies.filter((c) => !c.alreadyInterviewing);
 
+  const fail = (message) => {
+    // Show it inside the modal — the page banner sits behind the overlay.
+    setModalError(message);
+    onError(message);
+  };
+
   const create = async (company) => {
+    if (creating) return;
     setCreating(true);
+    setModalError('');
     try {
       const res = await interviewsAPI.create({
         applicationId: company.applicationId || undefined,
@@ -574,7 +590,7 @@ function AddInterviewModal({ onClose, onCreated, onError }) {
       });
       const interview = res.data?.interview;
       if (!interview?.id) {
-        onError('Interview was created but the server returned no data. Refresh and try again.');
+        fail('Interview was created but the server returned no data. Refresh and try again.');
         return;
       }
       onCreated(interview);
@@ -611,8 +627,8 @@ function AddInterviewModal({ onClose, onCreated, onError }) {
       }
       const message = err.response?.data?.details
         ? `${err.response.data.error || 'Failed to add interview'}: ${err.response.data.details}`
-        : (err.response?.data?.error || 'Failed to add interview');
-      onError(message);
+        : (err.response?.data?.error || err.message || 'Failed to add interview');
+      fail(message);
     } finally {
       setCreating(false);
     }
@@ -632,20 +648,31 @@ function AddInterviewModal({ onClose, onCreated, onError }) {
           <button type="button" className="text-gray-400 hover:text-gray-700" onClick={onClose}>Close</button>
         </div>
 
-        <input
-          autoFocus
-          className="input"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search companies..."
-        />
+        {modalError && (
+          <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 dark:bg-red-900/30 dark:text-red-200">
+            {modalError}
+          </div>
+        )}
+
+        <div>
+          <input
+            autoFocus
+            className="input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search companies..."
+          />
+          {loaded && searching && <p className="text-xs text-gray-400 mt-1">Searching…</p>}
+        </div>
 
         <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-lg dark:border-gray-800">
-          {loading ? (
+          {!loaded ? (
             <p className="p-4 text-sm text-gray-400">Loading…</p>
           ) : available.length === 0 ? (
             <p className="p-4 text-sm text-gray-400">
-              No available companies. Generate a CV first, or this company is already on the board.
+              {searching
+                ? 'Searching…'
+                : 'No available companies. Generate a CV first, or this company is already on the board.'}
             </p>
           ) : (
             available.map((company) => (
@@ -654,7 +681,7 @@ function AddInterviewModal({ onClose, onCreated, onError }) {
                 type="button"
                 disabled={creating}
                 onClick={() => create(company)}
-                className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors disabled:opacity-60"
               >
                 <p className="font-medium text-gray-900 dark:text-gray-100">{company.companyName}</p>
                 <p className="text-xs text-gray-500 mt-0.5">
@@ -665,6 +692,8 @@ function AddInterviewModal({ onClose, onCreated, onError }) {
             ))
           )}
         </div>
+
+        {creating && <p className="text-xs text-gray-400">Adding to the board…</p>}
       </div>
     </div>
   );
