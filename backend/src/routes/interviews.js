@@ -244,9 +244,11 @@ router.post('/', authMiddleware, async (req, res) => {
     );
 
     if (existing) {
+      const existingFull = await fetchInterview(existing.id, req.user.id);
       return res.status(409).json({
         error: 'An interview for this company already exists.',
-        interviewId: existing.id
+        interviewId: existing.id,
+        interview: existingFull ? formatInterview(existingFull) : null
       });
     }
 

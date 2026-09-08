@@ -84,21 +84,31 @@ export default function Interviews() {
   const [selectedId, setSelectedId] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
 
-  const load = async () => {
+  const load = async (overrides = {}) => {
     try {
-      const params = { tab };
-      if (stageFilter) params.stage = stageFilter;
-      if (search.trim()) params.q = search.trim();
+      const nextTab = overrides.tab ?? tab;
+      const nextStage = overrides.stage !== undefined ? overrides.stage : stageFilter;
+      const nextSearch = overrides.search !== undefined ? overrides.search : search;
+      const params = { tab: nextTab };
+      if (nextStage) params.stage = nextStage;
+      if (String(nextSearch || '').trim()) params.q = String(nextSearch).trim();
       const res = await interviewsAPI.getAll(params);
       const rows = res.data?.interviews || [];
       setInterviews(rows);
       if (res.data?.stages?.length) setStages(res.data.stages);
       setSelectedId((prev) => {
+        if (overrides.selectId) return overrides.selectId;
         if (prev && rows.some((r) => r.id === prev)) return prev;
         return rows[0]?.id || null;
       });
+      setError('');
+      return rows;
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load interviews');
+      const message = err.response?.data?.details
+        ? `${err.response.data.error || 'Failed to load interviews'}: ${err.response.data.details}`
+        : (err.response?.data?.error || 'Failed to load interviews');
+      setError(message);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -140,8 +150,7 @@ export default function Interviews() {
       const res = await interviewsAPI.progress(id, action);
       const updated = res.data.interview;
       if (tab !== 'all') {
-        await load();
-        setSelectedId(updated.id);
+        await load({ selectId: updated.id });
       } else {
         replaceInterview(updated);
       }
@@ -160,12 +169,24 @@ export default function Interviews() {
 
   const handleCreated = async (interview) => {
     setShowAdd(false);
-    setTab('all');
-    setStageFilter('');
+    setError('');
     setSearch('');
+    setStageFilter('');
+    setTab('all');
+
+    // Show the new row immediately (don't wait on filters / reload timing)
+    if (interview?.id) {
+      setInterviews((prev) => {
+        const others = prev.filter((row) => row.id !== interview.id);
+        return [interview, ...others];
+      });
+      setSelectedId(interview.id);
+      setLoading(false);
+    }
+
+    // Then refresh from server with explicit All-tab params (avoid stale tab/search)
     setLoading(true);
-    await load();
-    setSelectedId(interview.id);
+    await load({ tab: 'all', stage: '', search: '', selectId: interview?.id });
   };
 
   if (loading) {
@@ -548,12 +569,50 @@ function AddInterviewModal({ onClose, onCreated, onError }) {
     setCreating(true);
     try {
       const res = await interviewsAPI.create({
-        applicationId: company.applicationId,
+        applicationId: company.applicationId || undefined,
         companyName: company.companyName
       });
-      onCreated(res.data.interview);
+      const interview = res.data?.interview;
+      if (!interview?.id) {
+        onError('Interview was created but the server returned no data. Refresh and try again.');
+        return;
+      }
+      onCreated(interview);
     } catch (err) {
-      onError(err.response?.data?.error || 'Failed to add interview');
+      if (err.response?.status === 409) {
+        const existing = err.response?.data?.interview;
+        if (existing?.id) {
+          onCreated(existing);
+          return;
+        }
+        if (err.response?.data?.interviewId) {
+          onCreated({
+            id: err.response.data.interviewId,
+            companyName: company.companyName,
+            jobTitle: company.jobTitle || '',
+            jdLink: company.jdLink || '',
+            resumeLabel: '',
+            resumeDocUrl: company.cvDocUrl || null,
+            resumePdfUrl: company.cvPdfUrl || null,
+            stage: 'hr_screen',
+            stageIndex: 0,
+            stageCount: 6,
+            status: 'upcoming',
+            interviewAt: null,
+            durationMinutes: 30,
+            platform: 'google_meet',
+            callLink: '',
+            interviewer: '',
+            notes: '',
+            applicationId: company.applicationId || null
+          });
+          return;
+        }
+      }
+      const message = err.response?.data?.details
+        ? `${err.response.data.error || 'Failed to add interview'}: ${err.response.data.details}`
+        : (err.response?.data?.error || 'Failed to add interview');
+      onError(message);
     } finally {
       setCreating(false);
     }
