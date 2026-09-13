@@ -320,30 +320,54 @@ async function ensureInterviewsTable() {
     console.warn('Interviews table ensured without FK constraints:', error.message);
   }
 
-  // Upgrade older interviews tables that were created without these columns
-  const columnMigrations = [
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS application_id INTEGER`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS job_title VARCHAR(255)`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS jd_link TEXT`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS resume_label VARCHAR(255)`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS stage VARCHAR(50) DEFAULT 'hr_screen'`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'upcoming'`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS interview_at TIMESTAMPTZ`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 30`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT 'google_meet'`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS call_link TEXT`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS interviewer TEXT`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS notes TEXT`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
-    `ALTER TABLE interviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+  // Read existing columns, then add anything missing (works even if IF NOT EXISTS is unavailable)
+  let existing = new Set();
+  try {
+    const result = await query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = current_schema()
+         AND table_name = 'interviews'`
+    );
+    existing = new Set((result.rows || []).map((row) => String(row.column_name).toLowerCase()));
+  } catch (err) {
+    console.warn('Could not read interviews columns:', err.message);
+  }
+
+  const requiredColumns = [
+    ['application_id', 'INTEGER'],
+    ['job_title', 'VARCHAR(255)'],
+    ['jd_link', 'TEXT'],
+    ['resume_label', 'VARCHAR(255)'],
+    ['stage', "VARCHAR(50) DEFAULT 'hr_screen'"],
+    ['status', "VARCHAR(50) DEFAULT 'upcoming'"],
+    ['interview_at', 'TIMESTAMPTZ'],
+    ['duration_minutes', 'INTEGER DEFAULT 30'],
+    ['platform', "VARCHAR(50) DEFAULT 'google_meet'"],
+    ['call_link', 'TEXT'],
+    ['interviewer', 'TEXT'],
+    ['notes', 'TEXT'],
+    ['created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
+    ['updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP']
   ];
 
-  for (const sql of columnMigrations) {
+  for (const [name, definition] of requiredColumns) {
+    if (existing.has(name)) continue;
     try {
-      await query(sql);
+      await query(`ALTER TABLE interviews ADD COLUMN ${name} ${definition}`);
+      console.log(`✅ Added interviews.${name}`);
+      existing.add(name);
     } catch (err) {
-      console.warn('Interviews column migration skipped:', err.message);
+      // Concurrent migrate / already added
+      if (!/already exists/i.test(err.message || '')) {
+        console.error(`Failed to add interviews.${name}:`, err.message);
+        throw err;
+      }
     }
+  }
+
+  if (!existing.has('stage')) {
+    throw new Error('interviews.stage column is still missing after migration');
   }
 
   await query(`UPDATE interviews SET stage = 'hr_screen' WHERE stage IS NULL`).catch(() => {});

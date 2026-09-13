@@ -23,7 +23,8 @@ const STATUSES = new Set(['upcoming', 'waiting_feedback', 'completed', 'rejected
 const PLATFORMS = new Set(['google_meet', 'zoom', 'teams', 'phone', 'other']);
 
 let interviewsReady = null;
-async function ensureReady() {
+async function ensureReady({ force = false } = {}) {
+  if (force) interviewsReady = null;
   if (!interviewsReady) {
     interviewsReady = (typeof db.ensureInterviewsTable === 'function'
       ? db.ensureInterviewsTable()
@@ -46,6 +47,10 @@ router.use(async (req, res, next) => {
   }
 });
 
+function isMissingColumnError(error) {
+  const message = String(error?.message || error || '');
+  return /column .* does not exist/i.test(message) || /no such column/i.test(message);
+}
 async function getOneCompat(sqliteSql, postgresSql, params = []) {
   if (isPostgres) {
     if (typeof db.getOne === 'function') return db.getOne(postgresSql, params);
@@ -224,17 +229,21 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 router.post('/', authMiddleware, async (req, res) => {
-  try {
+  const insertInterview = async () => {
     const { applicationId, companyName } = req.body;
     const app = await findLatestApplication(req.user.id, { applicationId, companyName });
 
     if (!app) {
-      return res.status(404).json({ error: 'No application found for that company. Generate a CV first.' });
+      const err = new Error('No application found for that company. Generate a CV first.');
+      err.status = 404;
+      throw err;
     }
 
     const name = prettyCompanyName(app.company_name);
     if (!name) {
-      return res.status(400).json({ error: 'Application is missing a company name' });
+      const err = new Error('Application is missing a company name');
+      err.status = 400;
+      throw err;
     }
 
     const existing = await getOneCompat(
@@ -245,11 +254,11 @@ router.post('/', authMiddleware, async (req, res) => {
 
     if (existing) {
       const existingFull = await fetchInterview(existing.id, req.user.id);
-      return res.status(409).json({
-        error: 'An interview for this company already exists.',
-        interviewId: existing.id,
-        interview: existingFull ? formatInterview(existingFull) : null
-      });
+      const err = new Error('An interview for this company already exists.');
+      err.status = 409;
+      err.interviewId = existing.id;
+      err.interview = existingFull ? formatInterview(existingFull) : null;
+      throw err;
     }
 
     const values = [
@@ -299,8 +308,48 @@ router.post('/', authMiddleware, async (req, res) => {
     if (!created) {
       throw new Error('Interview was created but could not be loaded');
     }
-    res.status(201).json({ interview: formatInterview(created) });
+    return formatInterview(created);
+  };
+
+  try {
+    // Always re-check/migrate schema before create (fixes older prod tables missing stage, etc.)
+    await ensureReady({ force: true });
+    const interview = await insertInterview();
+    res.status(201).json({ interview });
   } catch (error) {
+    if (error.status === 404 || error.status === 400) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    if (error.status === 409) {
+      return res.status(409).json({
+        error: error.message,
+        interviewId: error.interviewId,
+        interview: error.interview
+      });
+    }
+
+    if (isMissingColumnError(error)) {
+      try {
+        console.warn('Missing interviews column on create — forcing schema migrate and retry');
+        await ensureReady({ force: true });
+        const interview = await insertInterview();
+        return res.status(201).json({ interview });
+      } catch (retryError) {
+        console.error('Interview create retry error:', retryError);
+        if (retryError.status === 409) {
+          return res.status(409).json({
+            error: retryError.message,
+            interviewId: retryError.interviewId,
+            interview: retryError.interview
+          });
+        }
+        return res.status(500).json({
+          error: 'Failed to create interview',
+          details: retryError.message
+        });
+      }
+    }
+
     console.error('Interview create error:', error);
     if (String(error.message || '').toLowerCase().includes('unique')) {
       return res.status(409).json({ error: 'An interview for this company already exists.' });
