@@ -8,11 +8,11 @@ require('dotenv').config();
 const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 const express = require('express');
-const cors = require('cors');
 const cron = require('node-cron');
 const rateLimit = require('express-rate-limit');
 
-const { isOriginAllowed, isProduction, getFrontendOrigins } = require('./config/env');
+const { isProduction } = require('./config/env');
+const { applyCors } = require('./config/cors');
 const { mountProtectedUploads } = require('./middleware/protectedUploads');
 
 const db = process.env.DATABASE_URL
@@ -29,20 +29,10 @@ const { cleanupOldFiles } = require('./jobs/cleanup');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const allowedOrigins = [
-  ...getFrontendOrigins(),
-  'http://localhost:5173',
-  'http://localhost:3000'
-];
+// Render/Vercel sit behind a reverse proxy: needed so req.ip (rate limiting) is the client IP.
+app.set('trust proxy', 1);
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (isOriginAllowed(origin, allowedOrigins)) return callback(null, true);
-    console.warn(`CORS rejected origin ${origin} (allowed: ${allowedOrigins.join(', ') || 'none'})`);
-    callback(new Error('CORS not allowed'));
-  },
-  credentials: true
-}));
+applyCors(app);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
