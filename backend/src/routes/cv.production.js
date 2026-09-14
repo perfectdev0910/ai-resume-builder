@@ -47,9 +47,12 @@ function resolveStoredFile(application, ...keys) {
 }
 
 router.post('/generate', authMiddleware, async (req, res) => {
+  // Step timings show up in server logs so a stalled generation can be traced to a step.
+  const startedAt = Date.now();
+  const step = (label) => console.log(`[generate user=${req.user.id}] ${label} (+${Date.now() - startedAt}ms)`);
+
   try {
-    console.log('STORAGE_PROVIDER:', process.env.STORAGE_PROVIDER);
-    console.log('Using cloud generator:', !!process.env.STORAGE_PROVIDER);
+    step(`start storage=${process.env.STORAGE_PROVIDER || 'local'}`);
 
     const { jobDescription, jdLink, jobTitle: providedJobTitle, companyName: rawCompanyName, force } = req.body;
     const providedCompanyName = prettyCompanyName(rawCompanyName);
@@ -179,10 +182,12 @@ router.post('/generate', authMiddleware, async (req, res) => {
       }
     }
 
+    step('profile loaded, calling DeepSeek');
     const [cvOutcome, coverOutcome] = await Promise.allSettled([
       generateCVContent(userProfile, jobDescription),
       generateCoverLetter(userProfile, jobDescription, jobTitle, companyName)
     ]);
+    step(`DeepSeek done (cv=${cvOutcome.status}, cover=${coverOutcome.status})`);
 
     if (cvOutcome.status === 'rejected') {
       throw cvOutcome.reason instanceof Error
@@ -218,7 +223,7 @@ router.post('/generate', authMiddleware, async (req, res) => {
       ]);
     }
 
-    console.log('PDF RESULT:', pdfResult);
+    step('documents built and uploaded');
 
     // 🚨 Ensure cloud upload worked
     if (process.env.STORAGE_PROVIDER) {
@@ -292,6 +297,7 @@ router.post('/generate', authMiddleware, async (req, res) => {
     const coverLetterDocUrl = publicFileUrl(coverLetterDocxResult);
     const coverLetterPdfUrl = publicFileUrl(coverLetterPdfResult);
 
+    step(`done application=${application.id}`);
     return res.json({
       message: coverLetterWarning
         ? 'Resume generated successfully. Cover letter could not be generated.'
@@ -312,6 +318,7 @@ router.post('/generate', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
+    step(`failed: ${error.message}`);
     console.error('CV generation error:', error);
     return res.status(500).json({
       error: error.message || 'Failed to generate documents'

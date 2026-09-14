@@ -4,6 +4,9 @@ const DEFAULT_BASE_URL = 'https://api.deepseek.com';
 // 'deepseek-v4-flash' was retired (requests now route to deepseek-flash, V4.1, thinking ON by default).
 const DEFAULT_MODEL = 'deepseek-flash';
 const MAX_ATTEMPTS = 3;
+// Hard cap per upstream request. Without it the SDK waits 10 minutes per attempt (x3 SDK
+// retries x3 of ours), so a stalled DeepSeek response left /api/cv/generate pending "forever".
+const REQUEST_TIMEOUT_MS = Number(process.env.DEEPSEEK_TIMEOUT_MS) || 90_000;
 
 function getClient() {
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -13,7 +16,9 @@ function getClient() {
 
   return new OpenAI({
     apiKey,
-    baseURL: process.env.DEEPSEEK_BASE_URL || DEFAULT_BASE_URL
+    baseURL: process.env.DEEPSEEK_BASE_URL || DEFAULT_BASE_URL,
+    timeout: REQUEST_TIMEOUT_MS,
+    maxRetries: 0 // chatJson does its own retrying with backoff
   });
 }
 
@@ -52,7 +57,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function isRetryableHttpError(error) {
   const status = error?.status ?? error?.response?.status;
   if (status === 429 || (status >= 500 && status <= 599)) return true;
-  return !status && /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up/i.test(error?.message || '');
+  return !status && /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|timed out/i.test(error?.message || '');
 }
 
 async function chatJson({ model, messages, temperature = 0.7, max_tokens = 2000 }) {
@@ -78,12 +83,17 @@ async function chatJson({ model, messages, temperature = 0.7, max_tokens = 2000 
     }
 
     let response;
+    const startedAt = Date.now();
     try {
       response = await client.chat.completions.create(request);
+      console.log(`DeepSeek ${model} responded in ${Date.now() - startedAt}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
     } catch (error) {
       lastError = error;
+      console.warn(
+        `DeepSeek request failed after ${Date.now() - startedAt}ms ` +
+        `(attempt ${attempt}/${MAX_ATTEMPTS}, status=${error.status || 'n/a'}): ${error.message}`
+      );
       if (attempt < MAX_ATTEMPTS && isRetryableHttpError(error)) {
-        console.warn(`DeepSeek request failed (attempt ${attempt}/${MAX_ATTEMPTS}, status=${error.status || 'n/a'}): ${error.message}`);
         await sleep(1000 * attempt);
         continue;
       }
@@ -129,6 +139,9 @@ function describeUpstreamError(error) {
   if (status === 402) return 'DeepSeek account has insufficient balance';
   if (status === 429) return 'DeepSeek rate limit reached, try again shortly';
   if (status >= 500) return `DeepSeek is unavailable (HTTP ${status})`;
+  if (/timed out/i.test(error?.message || '')) {
+    return `DeepSeek did not respond within ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s, try again`;
+  }
   return error?.message || 'unknown error';
 }
 
