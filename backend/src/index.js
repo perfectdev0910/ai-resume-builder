@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 
-const { isOriginAllowed } = require('./config/env');
+const { isOriginAllowed, getFrontendOrigins } = require('./config/env');
 const { mountProtectedUploads } = require('./middleware/protectedUploads');
 
 const authRoutes = require('./routes/auth');
@@ -24,14 +24,15 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:5173',
+  ...getFrontendOrigins(),
   'http://localhost:5173',
   'http://localhost:3000'
-].filter(Boolean);
+];
 
 app.use(cors({
   origin: (origin, callback) => {
     if (isOriginAllowed(origin, allowedOrigins)) return callback(null, true);
+    console.warn(`CORS rejected origin ${origin} (allowed: ${allowedOrigins.join(', ') || 'none'})`);
     callback(new Error('CORS not allowed'));
   },
   credentials: true

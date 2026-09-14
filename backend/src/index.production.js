@@ -12,7 +12,7 @@ const cors = require('cors');
 const cron = require('node-cron');
 const rateLimit = require('express-rate-limit');
 
-const { isOriginAllowed, isProduction } = require('./config/env');
+const { isOriginAllowed, isProduction, getFrontendOrigins } = require('./config/env');
 const { mountProtectedUploads } = require('./middleware/protectedUploads');
 
 const db = process.env.DATABASE_URL
@@ -30,14 +30,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  ...getFrontendOrigins(),
   'http://localhost:5173',
   'http://localhost:3000'
-].filter(Boolean);
+];
 
 app.use(cors({
   origin: (origin, callback) => {
     if (isOriginAllowed(origin, allowedOrigins)) return callback(null, true);
+    console.warn(`CORS rejected origin ${origin} (allowed: ${allowedOrigins.join(', ') || 'none'})`);
     callback(new Error('CORS not allowed'));
   },
   credentials: true
