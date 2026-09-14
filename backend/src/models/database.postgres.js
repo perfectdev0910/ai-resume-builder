@@ -16,6 +16,8 @@ const pool = new Pool({
     : { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true' },
   max: 5,
   connectionTimeoutMillis: 10000,
+  // Client-side cap so a blocked statement errors out instead of holding a request open forever.
+  query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS) || 30000,
 });
 
 // Generic query helper
@@ -23,6 +25,10 @@ async function query(sql, params = []) {
   const client = await pool.connect();
   try {
     return await client.query(sql, params);
+  } catch (error) {
+    // Include the statement so a timeout in the logs points at the exact query.
+    console.error(`Query failed: ${error.message} | SQL: ${sql.replace(/\s+/g, ' ').trim().slice(0, 200)}`);
+    throw error;
   } finally {
     client.release();
   }

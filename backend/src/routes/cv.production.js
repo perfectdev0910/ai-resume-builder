@@ -85,6 +85,8 @@ router.post('/generate', authMiddleware, async (req, res) => {
       }
     }
 
+    step('duplicate check done');
+
     // ✅ Get user
     const user = await db.getOne(
       `SELECT id, email, full_name, address, phone_number, linkedin_profile, github_link, experience_years, credly_profile_link 
@@ -95,6 +97,8 @@ router.post('/generate', authMiddleware, async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    step('user loaded');
 
     // ✅ Fetch profile data
     const employmentHistory = await db.getAll(
@@ -112,6 +116,8 @@ router.post('/generate', authMiddleware, async (req, res) => {
         END DESC;`,
       [req.user.id]
     );
+
+    step('employment loaded');
 
     const education = await db.getAll(
       `SELECT * FROM education WHERE user_id = ${paramPlaceholder} ORDER BY graduation_date DESC`,
@@ -364,6 +370,8 @@ router.post('/preview', authMiddleware, async (req, res) => {
         [req.user.id]
       );
     }
+
+    step('employment loaded');
 
     const education = await db.getAll(
       `SELECT * FROM education WHERE user_id = ${paramPlaceholder} ORDER BY graduation_date DESC`,

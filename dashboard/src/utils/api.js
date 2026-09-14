@@ -1,7 +1,9 @@
 import axios from 'axios';
 
-const base = import.meta.env.VITE_API_URL || '';
-export const API_BASE_URL = `${base.replace(/\/$/, '')}/api`;
+// VITE_API_URL is the backend origin (https://xxx.onrender.com). A trailing slash or a
+// trailing /api are tolerated so a misconfigured env var doesn't produce /api/api/... URLs.
+const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '').replace(/\/api$/i, '');
+export const API_BASE_URL = `${base}/api`;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
