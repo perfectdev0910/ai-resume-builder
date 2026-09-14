@@ -1,5 +1,5 @@
 import { format, parseISO } from 'date-fns';
-import { toZonedTime, format as formatTz } from 'date-fns-tz';
+import { toZonedTime, fromZonedTime, format as formatTz } from 'date-fns-tz';
 
 export const TIMEZONES = [
   'UTC',
@@ -76,6 +76,15 @@ export function formatInTimeZone(dateStr, timeZone, formatStr = 'MMM d, yyyy') {
   } catch {
     return format(new Date(dateStr), formatStr);
   }
+}
+
+// Interpret a date + HH:mm typed in `timeZone` and return the UTC ISO string to store.
+export function zonedInputsToIso(date, time, timeZone) {
+  if (!date) return null;
+  const tz = resolveTimeZone(timeZone);
+  const utcDate = fromZonedTime(`${date}T${time || '00:00'}:00`, tz);
+  if (Number.isNaN(utcDate.getTime())) return null;
+  return utcDate.toISOString();
 }
 
 export function formatDateKey(dateKey, formatStr = 'MMM d') {

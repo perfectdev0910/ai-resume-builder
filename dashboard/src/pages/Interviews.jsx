@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { applicationsAPI, interviewsAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
-import { formatInTimeZone, resolveTimeZone } from '../utils/timezone';
+import { formatInTimeZone, resolveTimeZone, zonedInputsToIso } from '../utils/timezone';
 
 const STAGE_META = {
   hr_screen: { label: 'HR Screen', className: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' },
@@ -47,11 +47,9 @@ function toLocalInputs(iso, timeZone) {
 
 function localInputsToIso(date, time, timeZone) {
   if (!date) return null;
-  const hhmm = time || '09:00';
-  const guess = new Date(`${date}T${hhmm}:00`);
-  if (Number.isNaN(guess.getTime())) return null;
-  // Store as ISO UTC; browser local is acceptable for scheduling inputs
-  return guess.toISOString();
+  // Inputs are shown in the profile timezone (toLocalInputs), so they must be
+  // read back in that same zone — not the browser's — or the time drifts on every save.
+  return zonedInputsToIso(date, time || '09:00', timeZone);
 }
 
 function resumeHref(item) {
@@ -354,10 +352,18 @@ export default function Interviews() {
             onProgress={(action) => runProgress(selected.id, action)}
             onDelete={async () => {
               if (!confirm(`Remove interview for ${selected.companyName}?`)) return;
-              await interviewsAPI.delete(selected.id);
-              setSelectedId(null);
-              setLoading(true);
-              await load();
+              setSaving(true);
+              setError('');
+              try {
+                await interviewsAPI.delete(selected.id);
+                setSelectedId(null);
+                setLoading(true);
+                await load();
+              } catch (err) {
+                setError(err.response?.data?.error || 'Failed to delete interview');
+              } finally {
+                setSaving(false);
+              }
             }}
           />
         ) : (

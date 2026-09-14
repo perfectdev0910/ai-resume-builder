@@ -1,7 +1,9 @@
 const OpenAI = require('openai');
 
 const DEFAULT_BASE_URL = 'https://api.deepseek.com';
-const DEFAULT_MODEL = 'deepseek-v4-flash';
+// 'deepseek-v4-flash' was retired (requests now route to deepseek-flash, V4.1, thinking ON by default).
+const DEFAULT_MODEL = 'deepseek-flash';
+const MAX_ATTEMPTS = 3;
 
 function getClient() {
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -26,13 +28,13 @@ function safeParse(jsonString) {
   try {
     return JSON.parse(jsonString);
   } catch (e) {
-    console.error('JSON parse failed:', jsonString);
-
+    // Fallback attempts run without JSON mode, so prose around the object is expected.
     try {
       const start = jsonString.indexOf('{');
       const end = jsonString.lastIndexOf('}');
       return JSON.parse(jsonString.slice(start, end + 1));
     } catch (err) {
+      console.error('JSON parse failed:', jsonString);
       return {
         summary: '',
         skills: '',
@@ -44,23 +46,90 @@ function safeParse(jsonString) {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Transient upstream failures worth retrying (rate limit, overload, gateway errors, network).
+function isRetryableHttpError(error) {
+  const status = error?.status ?? error?.response?.status;
+  if (status === 429 || (status >= 500 && status <= 599)) return true;
+  return !status && /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up/i.test(error?.message || '');
+}
+
 async function chatJson({ model, messages, temperature = 0.7, max_tokens = 2000 }) {
   const client = getClient();
-  const response = await client.chat.completions.create({
-    model,
-    messages,
-    temperature,
-    max_tokens,
-    response_format: { type: 'json_object' },
-    thinking: { type: 'disabled' }
-  });
+  let lastError = null;
 
-  const content = response.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('Empty model response');
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // Attempt 1: normal JSON mode with thinking off.
+    // Later attempts also force reasoning_effort=none (in case the model ignored `thinking`)
+    // and drop response_format — DeepSeek documents that JSON mode "may occasionally return
+    // empty content"; the prompts already demand JSON and safeParse tolerates prose around it.
+    const request = {
+      model,
+      messages,
+      temperature,
+      max_tokens,
+      thinking: { type: 'disabled' }
+    };
+    if (attempt === 1) {
+      request.response_format = { type: 'json_object' };
+    } else {
+      request.reasoning_effort = 'none';
+    }
+
+    let response;
+    try {
+      response = await client.chat.completions.create(request);
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS && isRetryableHttpError(error)) {
+        console.warn(`DeepSeek request failed (attempt ${attempt}/${MAX_ATTEMPTS}, status=${error.status || 'n/a'}): ${error.message}`);
+        await sleep(1000 * attempt);
+        continue;
+      }
+      throw error;
+    }
+
+    const choice = response.choices?.[0];
+    const content = choice?.message?.content;
+    if (content && content.trim()) {
+      return safeParse(content);
+    }
+
+    const finishReason = choice?.finish_reason || 'unknown';
+    const reasoningLength = choice?.message?.reasoning_content?.length || 0;
+    console.warn(
+      `DeepSeek returned empty content (attempt ${attempt}/${MAX_ATTEMPTS}, model=${response.model || model}, ` +
+      `finish_reason=${finishReason}, reasoning_chars=${reasoningLength}, ` +
+      `usage=${JSON.stringify(response.usage || {})}, id=${response.id || 'n/a'})`
+    );
+
+    lastError = new Error(
+      `Empty model response (finish_reason=${finishReason}` +
+      (reasoningLength ? ', thinking mode was active' : '') + ')'
+    );
+
+    // Reasoning consumed the whole budget: give the next attempt (thinking forced off) more room.
+    if (finishReason === 'length' && reasoningLength) {
+      max_tokens = Math.min(max_tokens * 2, 16000);
+    }
+
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(1000 * attempt);
+    }
   }
 
-  return safeParse(content);
+  throw lastError || new Error('Empty model response');
+}
+
+// Short, safe-to-show reason for the client (no keys / request bodies).
+function describeUpstreamError(error) {
+  const status = error?.status ?? error?.response?.status;
+  if (status === 401) return 'DeepSeek rejected the API key';
+  if (status === 402) return 'DeepSeek account has insufficient balance';
+  if (status === 429) return 'DeepSeek rate limit reached, try again shortly';
+  if (status >= 500) return `DeepSeek is unavailable (HTTP ${status})`;
+  return error?.message || 'unknown error';
 }
 
 async function generateCVContent(userProfile, jobDescription) {
@@ -230,7 +299,7 @@ Guidelines:
     console.error('DeepSeek CV generation error:', error);
     throw new Error(error.message === 'DEEPSEEK_API_KEY is not configured'
       ? error.message
-      : 'Failed to generate CV content');
+      : `Failed to generate CV content: ${describeUpstreamError(error)}`);
   }
 }
 
@@ -298,7 +367,7 @@ Write a compelling, personalized cover letter that connects the candidate's expe
     console.error('DeepSeek cover letter generation error:', error);
     throw new Error(error.message === 'DEEPSEEK_API_KEY is not configured'
       ? error.message
-      : 'Failed to generate cover letter');
+      : `Failed to generate cover letter: ${describeUpstreamError(error)}`);
   }
 }
 

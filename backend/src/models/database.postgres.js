@@ -230,7 +230,7 @@ async function initDatabase() {
         resume_label VARCHAR(255),
         stage VARCHAR(50) DEFAULT 'hr_screen',
         status VARCHAR(50) DEFAULT 'upcoming',
-        interview_at TIMESTAMP,
+        interview_at TIMESTAMPTZ,
         duration_minutes INTEGER DEFAULT 30,
         platform VARCHAR(50) DEFAULT 'google_meet',
         call_link TEXT,
@@ -322,14 +322,19 @@ async function ensureInterviewsTable() {
 
   // Read existing columns, then add anything missing (works even if IF NOT EXISTS is unavailable)
   let existing = new Set();
+  const columnTypes = new Map();
   try {
     const result = await query(
-      `SELECT column_name
+      `SELECT column_name, data_type
        FROM information_schema.columns
        WHERE table_schema = current_schema()
          AND table_name = 'interviews'`
     );
-    existing = new Set((result.rows || []).map((row) => String(row.column_name).toLowerCase()));
+    for (const row of result.rows || []) {
+      const name = String(row.column_name).toLowerCase();
+      existing.add(name);
+      columnTypes.set(name, String(row.data_type || '').toLowerCase());
+    }
   } catch (err) {
     console.warn('Could not read interviews columns:', err.message);
   }
@@ -368,6 +373,23 @@ async function ensureInterviewsTable() {
 
   if (!existing.has('stage')) {
     throw new Error('interviews.stage column is still missing after migration');
+  }
+
+  // Older deployments created interview_at as TIMESTAMP (no zone): Postgres drops the 'Z'
+  // from ISO input and pg reads it back in the process's local zone. Existing values were
+  // written by a UTC process, so reinterpret them as UTC while converting.
+  if (columnTypes.get('interview_at') === 'timestamp without time zone') {
+    try {
+      await query(
+        `ALTER TABLE interviews
+         ALTER COLUMN interview_at TYPE TIMESTAMPTZ
+         USING interview_at AT TIME ZONE 'UTC'`
+      );
+      console.log('✅ Migrated interviews.interview_at to TIMESTAMPTZ');
+    } catch (err) {
+      console.error('Failed to migrate interviews.interview_at to TIMESTAMPTZ:', err.message);
+      throw err;
+    }
   }
 
   await query(`UPDATE interviews SET stage = 'hr_screen' WHERE stage IS NULL`).catch(() => {});
