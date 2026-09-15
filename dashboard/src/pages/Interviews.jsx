@@ -563,7 +563,10 @@ function AddInterviewModal({ onClose, onCreated, onError }) {
       setModalError('');
     } catch (err) {
       if (seq !== searchSeq.current) return;
-      setModalError(err.response?.data?.error || 'Failed to load companies');
+      const message = err.response?.data?.details
+        ? `${err.response.data.error || 'Failed to load companies'}: ${err.response.data.details}`
+        : (err.response?.data?.error || err.message || 'Failed to load companies');
+      setModalError(message);
     } finally {
       if (seq === searchSeq.current) {
         setSearching(false);
@@ -678,7 +681,9 @@ function AddInterviewModal({ onClose, onCreated, onError }) {
             <p className="p-4 text-sm text-gray-400">
               {searching
                 ? 'Searching…'
-                : 'No available companies. Generate a CV first, or this company is already on the board.'}
+                : modalError
+                  ? 'Could not load your companies — see the error above.'
+                  : 'No available companies. Generate a CV first, or this company is already on the board.'}
             </p>
           ) : (
             available.map((company) => (

@@ -374,6 +374,7 @@ async function ensureInterviewsTable() {
         console.error(`Failed to add interviews.${name}:`, err.message);
         throw err;
       }
+      existing.add(name);
     }
   }
 

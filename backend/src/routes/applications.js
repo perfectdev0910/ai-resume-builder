@@ -166,25 +166,36 @@ router.get('/companies', authMiddleware, async (req, res) => {
       postgresSearch = 'AND LOWER(company_name) LIKE LOWER($2)';
     }
 
+    const limit = search ? 200 : 500;
+
+    // One query: per company (case-insensitive) pick the latest application row and carry
+    // the group count / last applied date via window functions. The previous version ran
+    // an extra query per company inside Promise.all, which exhausted the connection pool
+    // (pool max 5, 10s wait cap) on hosted Postgres and made the whole request 500.
+    const selectLatestPerCompany = (searchSql) => `
+      SELECT company_name, id, job_title, jd_link, cv_doc_url, cv_pdf_url, applied_at,
+             last_applied_at, count
+      FROM (
+        SELECT company_name, id, job_title, jd_link, cv_doc_url, cv_pdf_url, applied_at,
+               MAX(applied_at) OVER (PARTITION BY LOWER(company_name)) AS last_applied_at,
+               COUNT(*) OVER (PARTITION BY LOWER(company_name)) AS count,
+               ROW_NUMBER() OVER (
+                 PARTITION BY LOWER(company_name)
+                 ORDER BY applied_at DESC, id DESC
+               ) AS rn
+        FROM applications
+        WHERE user_id = ${isPostgres ? '$1' : '?'}
+          AND company_name IS NOT NULL
+          AND TRIM(company_name) != ''
+          ${searchSql}
+      ) latest
+      WHERE rn = 1
+      ORDER BY last_applied_at DESC
+      LIMIT ${limit}`;
+
     const companies = await getAllCompat(
-      `SELECT company_name, MAX(applied_at) as last_applied_at, COUNT(*) as count
-       FROM applications
-       WHERE user_id = ?
-         AND company_name IS NOT NULL
-         AND TRIM(company_name) != ''
-         ${sqliteSearch}
-       GROUP BY LOWER(company_name)
-       ORDER BY last_applied_at DESC
-       LIMIT ${search ? 200 : 500}`,
-      `SELECT MIN(company_name) as company_name, MAX(applied_at) as last_applied_at, COUNT(*)::int as count
-       FROM applications
-       WHERE user_id = $1
-         AND company_name IS NOT NULL
-         AND TRIM(company_name) != ''
-         ${postgresSearch}
-       GROUP BY LOWER(company_name)
-       ORDER BY last_applied_at DESC
-       LIMIT ${search ? 200 : 500}`,
+      selectLatestPerCompany(sqliteSearch),
+      selectLatestPerCompany(postgresSearch),
       params
     );
 
@@ -200,7 +211,7 @@ router.get('/companies', authMiddleware, async (req, res) => {
       : [];
     const interviewSet = new Set(interviewRows.map((r) => r.company_key));
 
-    const detailed = await Promise.all(companies.map(async (row) => {
+    const detailed = companies.map((row) => {
       const lastAppliedAt = row.last_applied_at;
       const lastAppliedMs = lastAppliedAt ? new Date(lastAppliedAt).getTime() : 0;
       const base = {
@@ -213,27 +224,15 @@ router.get('/companies', authMiddleware, async (req, res) => {
 
       if (!forInterview) return base;
 
-      const latest = await getOneCompat(
-        `SELECT id, job_title, company_name, jd_link, cv_doc_url, cv_pdf_url, applied_at
-         FROM applications
-         WHERE user_id = ? AND LOWER(company_name) = LOWER(?)
-         ORDER BY applied_at DESC LIMIT 1`,
-        `SELECT id, job_title, company_name, jd_link, cv_doc_url, cv_pdf_url, applied_at
-         FROM applications
-         WHERE user_id = $1 AND LOWER(company_name) = LOWER($2)
-         ORDER BY applied_at DESC LIMIT 1`,
-        [req.user.id, row.company_name]
-      );
-
       return {
         ...base,
-        applicationId: latest?.id || null,
-        jobTitle: latest?.job_title || '',
-        jdLink: latest?.jd_link || '',
-        cvDocUrl: latest?.cv_doc_url || null,
-        cvPdfUrl: latest?.cv_pdf_url || null
+        applicationId: row.id || null,
+        jobTitle: row.job_title || '',
+        jdLink: row.jd_link || '',
+        cvDocUrl: row.cv_doc_url || null,
+        cvPdfUrl: row.cv_pdf_url || null
       };
-    }));
+    });
 
     res.json({ companies: detailed });
   } catch (error) {
