@@ -371,6 +371,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
 
     const next = {
+      company_name: req.body.companyName !== undefined
+        ? prettyCompanyName(req.body.companyName)
+        : existing.company_name,
       job_title: req.body.jobTitle !== undefined ? req.body.jobTitle : existing.job_title,
       jd_link: req.body.jdLink !== undefined ? req.body.jdLink : existing.jd_link,
       resume_label: req.body.resumeLabel !== undefined ? req.body.resumeLabel : existing.resume_label,
@@ -385,6 +388,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
       notes: req.body.notes !== undefined ? req.body.notes : existing.notes
     };
 
+    if (!next.company_name) {
+      return res.status(400).json({ error: 'Company name is required' });
+    }
     if (next.stage && !STAGES.includes(next.stage)) {
       return res.status(400).json({ error: 'Invalid stage' });
     }
@@ -404,20 +410,33 @@ router.put('/:id', authMiddleware, async (req, res) => {
       }
     }
 
+    // One interview per company: renaming onto another row's company is a conflict.
+    if (next.company_name.toLowerCase() !== String(existing.company_name || '').toLowerCase()) {
+      const clash = await getOneCompat(
+        `SELECT id FROM interviews WHERE user_id = ? AND LOWER(company_name) = LOWER(?) AND id != ?`,
+        `SELECT id FROM interviews WHERE user_id = $1 AND LOWER(company_name) = LOWER($2) AND id != $3`,
+        [req.user.id, next.company_name, req.params.id]
+      );
+      if (clash) {
+        return res.status(409).json({ error: 'An interview for this company already exists.', interviewId: clash.id });
+      }
+    }
+
     await runQueryCompat(
       `UPDATE interviews SET
-        job_title = ?, jd_link = ?, resume_label = ?, application_id = ?,
+        company_name = ?, job_title = ?, jd_link = ?, resume_label = ?, application_id = ?,
         stage = ?, status = ?, interview_at = ?, duration_minutes = ?,
         platform = ?, call_link = ?, interviewer = ?, notes = ?,
         updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND user_id = ?`,
       `UPDATE interviews SET
-        job_title = $1, jd_link = $2, resume_label = $3, application_id = $4,
-        stage = $5, status = $6, interview_at = $7, duration_minutes = $8,
-        platform = $9, call_link = $10, interviewer = $11, notes = $12,
+        company_name = $1, job_title = $2, jd_link = $3, resume_label = $4, application_id = $5,
+        stage = $6, status = $7, interview_at = $8, duration_minutes = $9,
+        platform = $10, call_link = $11, interviewer = $12, notes = $13,
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $13 AND user_id = $14`,
+       WHERE id = $14 AND user_id = $15`,
       [
+        next.company_name,
         next.job_title || '',
         next.jd_link || '',
         next.resume_label || '',
@@ -439,6 +458,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
     res.json({ interview: formatInterview(updated) });
   } catch (error) {
     console.error('Interview update error:', error);
+    if (String(error.message || '').toLowerCase().includes('unique')) {
+      return res.status(409).json({ error: 'An interview for this company already exists.' });
+    }
     res.status(500).json({ error: 'Failed to update interview', details: error.message });
   }
 });

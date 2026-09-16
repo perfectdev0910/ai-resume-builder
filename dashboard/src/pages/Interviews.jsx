@@ -159,6 +159,24 @@ export default function Interviews() {
     }
   };
 
+  const removeInterview = async (item) => {
+    if (!item) return;
+    if (!confirm(`Remove interview for ${item.companyName}?`)) return;
+    setSaving(true);
+    setError('');
+    try {
+      await interviewsAPI.delete(item.id);
+      // Drop the row immediately, then resync with the server.
+      setInterviews((prev) => prev.filter((row) => row.id !== item.id));
+      if (selectedId === item.id) setSelectedId(null);
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to delete interview');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSearch = (e) => {
     e.preventDefault();
     setLoading(true);
@@ -269,6 +287,7 @@ export default function Interviews() {
                   <th className="px-3 py-3 font-medium">Duration</th>
                   <th className="px-3 py-3 font-medium">Platform</th>
                   <th className="px-3 py-3 font-medium">Resume</th>
+                  <th className="px-3 py-3 font-medium text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -324,12 +343,28 @@ export default function Interviews() {
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={(e) => { e.stopPropagation(); removeInterview(item); }}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/30"
+                            title="Delete interview"
+                            aria-label={`Delete ${item.companyName}`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
                 {interviews.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-16 text-center text-gray-400">
+                    <td colSpan={7} className="px-4 py-16 text-center text-gray-400">
                       No interviews yet. Add one from a company you already applied to.
                     </td>
                   </tr>
@@ -338,7 +373,7 @@ export default function Interviews() {
             </table>
           </div>
           <p className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100 dark:border-gray-800">
-            Click a row — everything in the panel is editable: stage, status, time, link, resume, interviewer, notes.
+            Click a row to see and edit its details in the panel. Use the trash icon to delete.
           </p>
         </div>
 
@@ -350,21 +385,7 @@ export default function Interviews() {
             saving={saving}
             onSave={(patch) => persist(selected.id, patch)}
             onProgress={(action) => runProgress(selected.id, action)}
-            onDelete={async () => {
-              if (!confirm(`Remove interview for ${selected.companyName}?`)) return;
-              setSaving(true);
-              setError('');
-              try {
-                await interviewsAPI.delete(selected.id);
-                setSelectedId(null);
-                setLoading(true);
-                await load();
-              } catch (err) {
-                setError(err.response?.data?.error || 'Failed to delete interview');
-              } finally {
-                setSaving(false);
-              }
-            }}
+            onDelete={() => removeInterview(selected)}
           />
         ) : (
           <div className="card p-8 text-center text-gray-400">
@@ -386,6 +407,7 @@ export default function Interviews() {
 
 function InterviewDetailPanel({ item, timeZone, stages, saving, onSave, onProgress, onDelete }) {
   const local = toLocalInputs(item.interviewAt, timeZone);
+  const roleInputRef = useRef(null);
   const [date, setDate] = useState(local.date);
   const [time, setTime] = useState(local.time);
   const [duration, setDuration] = useState(item.durationMinutes || 30);
@@ -433,7 +455,19 @@ function InterviewDetailPanel({ item, timeZone, stages, saving, onSave, onProgre
   return (
     <aside className="card p-5 space-y-5 sticky top-4">
       <div>
-        <p className="text-xs uppercase tracking-wide text-gray-400">Interview detail</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs uppercase tracking-wide text-gray-400">Interview detail</p>
+          <button
+            type="button"
+            className="btn btn-secondary py-1 px-3 text-xs"
+            onClick={() => {
+              roleInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              roleInputRef.current?.focus();
+            }}
+          >
+            Edit
+          </button>
+        </div>
         <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{item.companyName}</h2>
         <p className="text-sm text-gray-500 mt-0.5">{item.jobTitle || 'No role set'}</p>
         <span className={`inline-flex mt-3 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide ${stageClass(item.stage)}`}>
@@ -485,7 +519,7 @@ function InterviewDetailPanel({ item, timeZone, stages, saving, onSave, onProgre
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Everything is editable</p>
         <label className="block">
           <span className="label">Role</span>
-          <input className="input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+          <input ref={roleInputRef} className="input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">

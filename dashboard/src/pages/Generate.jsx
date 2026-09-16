@@ -167,9 +167,33 @@ export default function Generate() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Generate Tailored Resume & Cover Letter</h1>
-        <p className="text-gray-500 mt-1">Paste a job description and we'll create a perfectly tailored Resume and Cover Letter</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Generate Tailored Resume & Cover Letter</h1>
+          <p className="text-gray-500 mt-1">Paste a job description and we'll create a perfectly tailored Resume and Cover Letter</p>
+        </div>
+        {!result && (
+          <button
+            type="button"
+            onClick={() => handleGenerate(false)}
+            disabled={loading || !jobDescription.trim()}
+            className="btn btn-primary px-6 shrink-0"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate Resume & Cover Letter
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Duplicate Warning Modal */}
@@ -324,26 +348,6 @@ Include:
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => handleGenerate(false)}
-              disabled={loading || !jobDescription.trim()}
-              className="btn btn-primary px-6"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Generate Resume & Cover Letter
-                </>
-              )}
-            </button>
             <button
               type="button"
               onClick={handlePreview}
