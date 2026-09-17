@@ -72,6 +72,8 @@ initDatabase().then(async () => {
   await migrateExistingUsers();
   await initAdminAccount();
 
+  calendarRoutes.startAutoSync();
+
   app.listen(PORT, () => {
     console.log(`🚀 AI Resume Builder API running on port ${PORT}`);
   });

@@ -175,11 +175,50 @@ function initDatabase() {
           refresh_token TEXT,
           scope TEXT,
           expires_at DATETIME,
+          last_synced_at DATETIME,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
-      `, (err) => {
+      `);
+      database.run(`ALTER TABLE google_calendar_tokens ADD COLUMN last_synced_at DATETIME`, () => {});
+
+      // Events synced from Google Calendar, enriched with interview details the user can edit
+      database.run(`
+        CREATE TABLE IF NOT EXISTS calendar_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          google_calendar_id TEXT NOT NULL,
+          google_event_id TEXT NOT NULL,
+          calendar_name TEXT,
+          color TEXT,
+          title TEXT,
+          company_name TEXT,
+          job_title TEXT,
+          stage TEXT,
+          meeting_link TEXT,
+          start_at TEXT,
+          end_at TEXT,
+          all_day INTEGER DEFAULT 0,
+          attendees TEXT,
+          description TEXT,
+          location TEXT,
+          html_link TEXT,
+          application_id INTEGER,
+          jd_link TEXT,
+          resume_link TEXT,
+          notes TEXT,
+          edited_fields TEXT,
+          hidden INTEGER DEFAULT 0,
+          synced_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL,
+          UNIQUE(user_id, google_calendar_id, google_event_id)
+        )
+      `);
+      database.run(`CREATE INDEX IF NOT EXISTS idx_calendar_events_user_start ON calendar_events(user_id, start_at)`, (err) => {
         if (err) reject(err);
         else resolve();
       });

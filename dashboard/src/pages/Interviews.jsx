@@ -1,18 +1,153 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { API_BASE_URL, calendarAPI } from '../utils/api';
+import { API_BASE_URL, applicationsAPI, calendarAPI, cvAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
-import { formatInTimeZone, resolveTimeZone } from '../utils/timezone';
+import { formatInTimeZone, resolveTimeZone, zonedInputsToIso } from '../utils/timezone';
 
 const TABS = [
   { id: 'calendar', label: 'Calendar' },
   { id: 'analysis', label: 'Analysis' }
 ];
 
+const VIEWS = [
+  { id: 'day', label: 'Day' },
+  { id: 'week', label: 'Week' },
+  { id: 'month', label: 'Month' }
+];
+
+const STAGE_META = {
+  hr_screen: { label: 'HR Screen', className: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' },
+  assessment: { label: 'Assessment', className: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' },
+  technical: { label: 'Technical', className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' },
+  background_check: { label: 'Background Check', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200' },
+  onsite_final: { label: 'Onsite / Final', className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200' },
+  offer: { label: 'Offer', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' }
+};
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const HOUR_PX = 48;
+const DEFAULT_COLOR = '#6366f1';
 
 // The OAuth popup's final page is served by the backend, so its messages come from the API origin.
 const API_ORIGIN = new URL(API_BASE_URL, window.location.origin).origin;
+
+/* ------------------------------------------------------------------ */
+/* Date helpers (all "calendar day" math happens in the profile zone)  */
+/* ------------------------------------------------------------------ */
+
+function pad(n) {
+  return String(n).padStart(2, '0');
+}
+
+function keyOf(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function fromKey(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function addDays(date, n) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
+}
+
+function startOfWeek(date) {
+  return addDays(date, -date.getDay());
+}
+
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+// yyyy-mm-dd of an instant in the profile timezone (all-day events keep their plain date).
+function dayKeyInZone(iso, timeZone, allDay) {
+  if (!iso) return '';
+  if (allDay) return iso.slice(0, 10);
+  try {
+    return formatInTimeZone(iso, timeZone, 'yyyy-MM-dd');
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+function minutesInZone(iso, timeZone) {
+  try {
+    const [h, m] = formatInTimeZone(iso, timeZone, 'HH:mm').split(':').map(Number);
+    return h * 60 + m;
+  } catch {
+    return 0;
+  }
+}
+
+function toLocalInputs(iso, timeZone, allDay) {
+  if (!iso) return { date: '', time: '' };
+  if (allDay) return { date: iso.slice(0, 10), time: '' };
+  try {
+    const formatted = formatInTimeZone(iso, timeZone, "yyyy-MM-dd'T'HH:mm");
+    const [date, time] = formatted.split('T');
+    return { date: date || '', time: time || '' };
+  } catch {
+    return { date: '', time: '' };
+  }
+}
+
+function localInputsToIso(date, time, timeZone) {
+  if (!date) return null;
+  return zonedInputsToIso(date, time || '09:00', timeZone);
+}
+
+function buildMonthGrid(year, month) {
+  const first = new Date(year, month, 1);
+  const start = addDays(first, -first.getDay());
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = addDays(start, i);
+    cells.push({ date: d, key: keyOf(d), inMonth: d.getMonth() === month });
+  }
+  if (cells.slice(35).every((c) => !c.inMonth)) cells.length = 35;
+  return cells;
+}
+
+// First day of the month the calendar was connected — the earliest month we show.
+function connectedMonthStart(status) {
+  const raw = status?.connectedAt;
+  const d = raw ? new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw) : new Date();
+  const base = Number.isNaN(d.getTime()) ? new Date() : d;
+  return new Date(base.getFullYear(), base.getMonth(), 1);
+}
+
+function relativeTime(value) {
+  if (!value) return '';
+  const raw = String(value);
+  const d = new Date(/^d{4}-d{2}-d{2} d{2}:d{2}:d{2}$/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw);
+  const diff = Math.max(0, Date.now() - d.getTime());
+  const min = Math.round(diff / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h} h ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function stageLabel(stage) {
+  return STAGE_META[stage]?.label || '';
+}
+
+function eventLabel(ev) {
+  return ev.companyName ? `${ev.companyName}${ev.jobTitle ? ` · ${ev.jobTitle}` : ''}` : ev.title;
+}
+
+function timeRange(ev, timeZone) {
+  if (ev.allDay) return 'All day';
+  const start = formatInTimeZone(ev.start, timeZone, 'HH:mm');
+  const end = ev.end ? formatInTimeZone(ev.end, timeZone, 'HH:mm') : '';
+  return end ? `${start} – ${end}` : start;
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
 
 export default function Interviews() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -58,94 +193,50 @@ export default function Interviews() {
 /* Calendar tab                                                        */
 /* ------------------------------------------------------------------ */
 
-function monthKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-// Calendar-day key (yyyy-mm-dd) for an event start, in the profile timezone.
-function dayKeyInZone(iso, timeZone, allDay) {
-  if (!iso) return '';
-  // All-day events come as plain dates (yyyy-mm-dd) — no zone conversion.
-  if (allDay || /^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso.slice(0, 10);
-  try {
-    return formatInTimeZone(iso, timeZone, 'yyyy-MM-dd');
-  } catch {
-    return iso.slice(0, 10);
-  }
-}
-
-// First day of the month the calendar was connected — the earliest month we show.
-function connectedMonthStart(status) {
-  const raw = status?.connectedAt;
-  // SQLite returns "yyyy-mm-dd HH:MM:SS" in UTC without a zone marker.
-  const d = raw ? new Date(/^d{4}-d{2}-d{2} d{2}:d{2}:d{2}$/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw) : new Date();
-  const base = Number.isNaN(d.getTime()) ? new Date() : d;
-  return new Date(base.getFullYear(), base.getMonth(), 1);
-}
-
-function buildMonthGrid(year, month) {
-  const first = new Date(year, month, 1);
-  const start = new Date(year, month, 1 - first.getDay());
-  const cells = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
-    cells.push({
-      date: d,
-      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-      inMonth: d.getMonth() === month
-    });
-  }
-  // Drop a trailing all-out-of-month week so short months don't show 6 rows.
-  if (cells.slice(35).every((c) => !c.inMonth)) cells.length = 35;
-  return cells;
-}
-
 function CalendarTab() {
   const { user } = useAuth();
   const timeZone = resolveTimeZone(user?.timezone);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [status, setStatus] = useState(null); // { configured, connected, email }
+  const [status, setStatus] = useState(null); // { configured, connected, email, connectedAt }
   const [statusError, setStatusError] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState('');
   const popupRef = useRef(null);
 
+  const [view, setView] = useState('month');
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
   const [events, setEvents] = useState([]);
-  const [calendars, setCalendars] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [eventsError, setEventsError] = useState('');
   const [selectedDay, setSelectedDay] = useState(null);
+  const [openEventId, setOpenEventId] = useState(null);
+
+  const minMonth = useMemo(() => connectedMonthStart(status), [status?.connectedAt]);
 
   const loadStatus = async () => {
     try {
       const res = await calendarAPI.getGoogleStatus();
       setStatus(res.data);
       setStatusError('');
-      // The calendar starts at (and never goes before) the month the account was connected.
-      if (res.data?.connected) {
-        setSelectedDay(null);
-        setCursor(connectedMonthStart(res.data));
-      }
+      return res.data;
     } catch (err) {
       setStatusError(err.response?.data?.error || 'Failed to check Google Calendar status');
+      return null;
     }
   };
 
-  // Google sends the browser back to /interviews?google=connected|error after consent.
+  // Full-page fallback: Google sends the browser back to /interviews?google=... after consent.
   useEffect(() => {
     const result = searchParams.get('google');
     if (result) {
-      if (result === 'connected') {
-        setNotice('Google Calendar connected.');
-      } else {
-        const reason = searchParams.get('reason') || 'unknown';
-        setNotice(`Google Calendar connection failed (${reason.replace(/_/g, ' ')}).`);
-      }
+      setNotice(result === 'connected'
+        ? 'Google Calendar connected.'
+        : `Google Calendar connection failed (${(searchParams.get('reason') || 'unknown').replace(/_/g, ' ')}).`);
       const next = new URLSearchParams(searchParams);
       next.delete('google');
       next.delete('reason');
@@ -155,22 +246,35 @@ function CalendarTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Once connected, start on today (or the connected month if today is earlier — never before it).
+  useEffect(() => {
+    if (!status?.connected) return;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    setCursor(today < minMonth ? minMonth : today);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.connected, status?.connectedAt]);
+
+  // Visible date range for the current view.
+  const range = useMemo(() => {
+    if (view === 'day') return { from: cursor, to: addDays(cursor, 1), days: [cursor] };
+    if (view === 'week') {
+      const from = startOfWeek(cursor);
+      return { from, to: addDays(from, 7), days: Array.from({ length: 7 }, (_, i) => addDays(from, i)) };
+    }
+    const grid = buildMonthGrid(cursor.getFullYear(), cursor.getMonth());
+    return { from: grid[0].date, to: addDays(grid[grid.length - 1].date, 1), grid, days: grid.map((c) => c.date) };
+  }, [view, cursor]);
+
   const loadEvents = async () => {
     setLoadingEvents(true);
     setEventsError('');
     try {
-      // Fetch the whole visible grid (leading/trailing days included).
-      const grid = buildMonthGrid(cursor.getFullYear(), cursor.getMonth());
-      const from = grid[0].date;
-      const last = grid[grid.length - 1].date;
-      const to = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
-      const res = await calendarAPI.getGoogleEvents(from.toISOString(), to.toISOString());
+      // Pad a day either side so zone shifts near the edges still show up.
+      const res = await calendarAPI.getEvents(addDays(range.from, -1).toISOString(), addDays(range.to, 1).toISOString());
       setEvents(res.data?.events || []);
-      setCalendars(res.data?.calendars || []);
     } catch (err) {
-      if (err.response?.data?.reconnect) {
-        setStatus((prev) => (prev ? { ...prev, connected: false } : prev));
-      }
+      if (err.response?.data?.reconnect) setStatus((prev) => (prev ? { ...prev, connected: false } : prev));
       setEventsError(err.response?.data?.error || 'Failed to load events');
     } finally {
       setLoadingEvents(false);
@@ -180,30 +284,45 @@ function CalendarTab() {
   useEffect(() => {
     if (status?.connected) loadEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status?.connected, monthKey(cursor)]);
+  }, [status?.connected, view, keyOf(cursor)]);
 
-  // Import: open Google's consent screen in a popup; the callback page posts the result back
-  // (see backend /calendar/google/callback) and closes itself, so the app never navigates away.
+  // The server re-syncs with Google every 5 minutes; pick up its changes on the same
+  // cadence and whenever the tab regains focus. Skipped while an event is being edited.
+  useEffect(() => {
+    if (!status?.connected) return undefined;
+    const refresh = () => {
+      if (document.hidden || openEventId) return;
+      loadStatus();
+      loadEvents();
+    };
+    const id = setInterval(refresh, 5 * 60 * 1000);
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.connected, view, keyOf(cursor), openEventId]);
+
+  /* ---- Google connection (popup) ---- */
+
   const connect = async () => {
     if (connecting) return;
     setConnecting(true);
     setNotice('');
-
-    // Open synchronously inside the click so popup blockers allow it; fill the URL in after.
     const w = 520;
     const h = 640;
     const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
     const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
     const popup = window.open('about:blank', 'google-calendar-import', `popup,width=${w},height=${h},left=${left},top=${top}`);
     popupRef.current = popup;
-
     try {
       const res = await calendarAPI.getGoogleAuthUrl();
       if (popup && !popup.closed) {
         popup.location.href = res.data.url;
         popup.focus();
       } else {
-        // Popup was blocked: fall back to a full-page redirect.
         window.location.href = res.data.url;
       }
     } catch (err) {
@@ -221,11 +340,9 @@ function CalendarTab() {
       if (!data || data.source !== 'google-calendar') return;
       popupRef.current = null;
       setConnecting(false);
-      if (data.google === 'connected') {
-        setNotice('Google Calendar connected.');
-      } else {
-        setNotice(`Google Calendar connection failed (${String(data.reason || 'unknown').replace(/_/g, ' ')}).`);
-      }
+      setNotice(data.google === 'connected'
+        ? 'Google Calendar connected and events imported.'
+        : `Google Calendar connection failed (${String(data.reason || 'unknown').replace(/_/g, ' ')}).`);
       loadStatus();
     };
     window.addEventListener('message', onMessage);
@@ -233,7 +350,6 @@ function CalendarTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // If the user just closes the popup, stop showing the "waiting" state.
   useEffect(() => {
     if (!connecting) return undefined;
     const id = setInterval(() => {
@@ -248,12 +364,27 @@ function CalendarTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connecting]);
 
+  const sync = async () => {
+    setSyncing(true);
+    setNotice('');
+    try {
+      const res = await calendarAPI.syncGoogle();
+      const { imported = 0, updated = 0, removed = 0 } = res.data || {};
+      setNotice(`Synced with Google: ${imported} new, ${updated} updated${removed ? `, ${removed} removed` : ''}.`);
+      await loadEvents();
+    } catch (err) {
+      if (err.response?.data?.reconnect) setStatus((prev) => (prev ? { ...prev, connected: false } : prev));
+      setNotice(err.response?.data?.error || 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const disconnect = async () => {
-    if (!confirm('Disconnect Google Calendar? Your events will no longer be shown here.')) return;
+    if (!confirm('Disconnect Google Calendar? Imported events and your edits will be removed.')) return;
     try {
       await calendarAPI.disconnectGoogle();
       setEvents([]);
-      setCalendars([]);
       setSelectedDay(null);
       setNotice('Google Calendar disconnected.');
       await loadStatus();
@@ -261,6 +392,47 @@ function CalendarTab() {
       setNotice(err.response?.data?.error || 'Failed to disconnect');
     }
   };
+
+  /* ---- Navigation ---- */
+
+  const clampToMin = (d) => (d < minMonth ? minMonth : d);
+  const atMin = view === 'month'
+    ? keyOf(startOfMonth(cursor)) === keyOf(minMonth)
+    : view === 'week' ? startOfWeek(cursor) <= minMonth : cursor <= minMonth;
+
+  const shift = (delta) => {
+    setSelectedDay(null);
+    setCursor((prev) => {
+      let next;
+      if (view === 'month') next = new Date(prev.getFullYear(), prev.getMonth() + delta, 1);
+      else if (view === 'week') next = addDays(prev, 7 * delta);
+      else next = addDays(prev, delta);
+      return clampToMin(next);
+    });
+  };
+
+  const todayKey = formatInTimeZone(new Date().toISOString(), timeZone, 'yyyy-MM-dd');
+
+  const goToday = () => {
+    const today = fromKey(todayKey);
+    setCursor(clampToMin(today));
+    setSelectedDay(today < minMonth ? null : todayKey);
+  };
+
+  const headerLabel = (() => {
+    if (view === 'month') return cursor.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    if (view === 'day') return cursor.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const a = range.from;
+    const b = addDays(range.to, -1);
+    const sameMonth = a.getMonth() === b.getMonth();
+    const left = a.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const right = sameMonth
+      ? `${b.getDate()}, ${b.getFullYear()}`
+      : b.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${left} – ${right}`;
+  })();
+
+  /* ---- Derived ---- */
 
   const eventsByDay = useMemo(() => {
     const map = new Map();
@@ -272,28 +444,18 @@ function CalendarTab() {
     return map;
   }, [events, timeZone]);
 
-  const grid = useMemo(() => buildMonthGrid(cursor.getFullYear(), cursor.getMonth()), [cursor]);
-  const todayKey = formatInTimeZone(new Date().toISOString(), timeZone, 'yyyy-MM-dd');
-  const monthLabel = cursor.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  const selectedEvents = selectedDay ? eventsByDay.get(selectedDay) || [] : [];
+  const openEvent = useMemo(() => events.find((e) => e.id === openEventId) || null, [events, openEventId]);
 
-  const minMonth = useMemo(() => connectedMonthStart(status), [status?.connectedAt]);
-  const atMinMonth = cursor.getFullYear() === minMonth.getFullYear() && cursor.getMonth() === minMonth.getMonth();
-
-  const shiftMonth = (delta) => {
-    setSelectedDay(null);
-    setCursor((prev) => {
-      const next = new Date(prev.getFullYear(), prev.getMonth() + delta, 1);
-      return next < minMonth ? minMonth : next;
-    });
+  const handleSaved = (updated) => {
+    setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
   };
 
-  const goToday = () => {
-    const now = new Date();
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    setCursor(thisMonth < minMonth ? minMonth : thisMonth);
-    setSelectedDay(thisMonth < minMonth ? null : todayKey);
+  const handleRemoved = (id) => {
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    setOpenEventId(null);
   };
+
+  /* ---- Render ---- */
 
   return (
     <div className="space-y-4">
@@ -307,9 +469,7 @@ function CalendarTab() {
         </div>
       )}
       {statusError && (
-        <div className="rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2 dark:bg-red-900/30 dark:text-red-200">
-          {statusError}
-        </div>
+        <div className="rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2 dark:bg-red-900/30 dark:text-red-200">{statusError}</div>
       )}
 
       {!status ? (
@@ -326,7 +486,8 @@ function CalendarTab() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">No calendar connected</h2>
             <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
-              Click Import to connect your Google Calendar and see interviews and meetings here. We only request read-only access.
+              Click Import to connect your Google Calendar. Your events are imported and interview details
+              (company, role, stage, links, attendees) are filled in automatically — you can edit everything.
             </p>
           </div>
           {status.configured ? (
@@ -343,163 +504,746 @@ function CalendarTab() {
       ) : (
         <>
           <div className="card p-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 className="btn btn-secondary px-3 py-1.5 disabled:opacity-40"
-                onClick={() => shiftMonth(-1)}
-                disabled={atMinMonth}
-                title={atMinMonth ? 'Calendar starts from the month you connected' : 'Previous month'}
-                aria-label="Previous month"
+                onClick={() => shift(-1)}
+                disabled={atMin}
+                title={atMin ? 'Calendar starts from the month you connected' : 'Previous'}
+                aria-label="Previous"
               >
                 ‹
               </button>
               <button type="button" className="btn btn-secondary px-3 py-1.5" onClick={goToday}>Today</button>
-              <button type="button" className="btn btn-secondary px-3 py-1.5" onClick={() => shiftMonth(1)} aria-label="Next month">›</button>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 ml-2">{monthLabel}</h2>
+              <button type="button" className="btn btn-secondary px-3 py-1.5" onClick={() => shift(1)} aria-label="Next">›</button>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 ml-2">{headerLabel}</h2>
               {loadingEvents && <span className="text-xs text-gray-400">Loading…</span>}
             </div>
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <div className="flex gap-1 p-1 rounded-full bg-gray-100 dark:bg-gray-800">
+                {VIEWS.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => { setView(v.id); setSelectedDay(null); }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      view === v.id ? 'bg-primary-600 text-white' : 'text-gray-600 hover:text-gray-900 dark:text-gray-300'
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
               <span className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-300">
                 <GoogleIcon />
                 {status.email || 'Google Calendar'}
               </span>
-              <button type="button" className="btn btn-secondary py-1.5 px-3 text-xs" onClick={loadEvents} disabled={loadingEvents}>
-                Refresh
+              <button
+                type="button"
+                className="btn btn-secondary py-1.5 px-3 text-xs"
+                onClick={sync}
+                disabled={syncing}
+                title={status.lastSyncedAt ? `Last synced ${relativeTime(status.lastSyncedAt)} · auto-syncs every 5 min` : 'Auto-syncs every 5 min'}
+              >
+                {syncing ? 'Syncing…' : 'Sync now'}
               </button>
-              <button type="button" className="btn btn-secondary py-1.5 px-3 text-xs" onClick={disconnect}>
-                Disconnect
-              </button>
+              {status.lastSyncedAt && (
+                <span className="text-xs text-gray-400" data-last-synced>Synced {relativeTime(status.lastSyncedAt)}</span>
+              )}
+              <button type="button" className="btn btn-secondary py-1.5 px-3 text-xs" onClick={disconnect}>Disconnect</button>
             </div>
           </div>
 
           {eventsError && (
             <div className="rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2 flex flex-wrap items-center justify-between gap-2 dark:bg-red-900/30 dark:text-red-200">
               <span>{eventsError}</span>
-              {!status.connected && (
-                <button type="button" className="btn btn-primary py-1 px-3 text-xs" onClick={connect}>Reconnect</button>
-              )}
+              {!status.connected && <button type="button" className="btn btn-primary py-1 px-3 text-xs" onClick={connect}>Reconnect</button>}
             </div>
           )}
 
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.8fr)] gap-4 items-start">
-            <div className="card overflow-hidden">
-              <div className="grid grid-cols-7 bg-gray-50 text-center text-xs uppercase tracking-wide text-gray-500 dark:bg-gray-800/60">
-                {WEEKDAYS.map((d) => (
-                  <div key={d} className="py-2 font-medium">{d}</div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 border-t border-gray-100 dark:border-gray-800">
-                {grid.map((cell) => {
-                  const dayEvents = eventsByDay.get(cell.key) || [];
-                  const isToday = cell.key === todayKey;
-                  const isSelected = cell.key === selectedDay;
-                  return (
-                    <button
-                      key={cell.key}
-                      type="button"
-                      onClick={() => setSelectedDay(cell.key)}
-                      className={`min-h-[96px] p-1.5 text-left border-b border-r border-gray-100 align-top transition-colors dark:border-gray-800 ${
-                        cell.inMonth ? '' : 'bg-gray-50/60 text-gray-400 dark:bg-gray-900/40'
-                      } ${isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}
-                    >
-                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
-                        isToday ? 'bg-primary-600 text-white' : cell.inMonth ? 'text-gray-800 dark:text-gray-200' : ''
-                      }`}>
-                        {cell.date.getDate()}
-                      </span>
-                      <div className="mt-1 space-y-0.5">
-                        {dayEvents.slice(0, 3).map((ev) => (
-                          <div
-                            key={ev.id}
-                            className="truncate rounded px-1 py-0.5 text-[11px] leading-tight text-gray-800 dark:text-gray-100"
-                            style={{ backgroundColor: ev.color ? `${ev.color}33` : undefined, borderLeft: `3px solid ${ev.color || '#6366f1'}` }}
-                            title={ev.title}
-                          >
-                            {!ev.allDay && (
-                              <span className="text-gray-500 dark:text-gray-300 mr-1">{formatInTimeZone(ev.start, timeZone, 'HH:mm')}</span>
-                            )}
-                            {ev.title}
-                          </div>
-                        ))}
-                        {dayEvents.length > 3 && (
-                          <div className="text-[11px] text-gray-500 px-1">+{dayEvents.length - 3} more</div>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <aside className="card p-5 space-y-4 sticky top-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-400">
-                  {selectedDay ? 'Events on' : 'Upcoming this month'}
-                </p>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                  {selectedDay
-                    ? new Date(`${selectedDay}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-                    : monthLabel}
-                </h3>
-              </div>
-
-              <EventList
-                events={selectedDay ? selectedEvents : events.filter((ev) => dayKeyInZone(ev.start, timeZone, ev.allDay) >= todayKey).slice(0, 12)}
+          {view === 'month' ? (
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.8fr)] gap-4 items-start">
+              <MonthView
+                grid={range.grid}
+                eventsByDay={eventsByDay}
+                todayKey={todayKey}
+                selectedDay={selectedDay}
                 timeZone={timeZone}
-                emptyText={selectedDay ? 'Nothing scheduled this day.' : 'No upcoming events this month.'}
+                onSelectDay={setSelectedDay}
+                onOpenEvent={setOpenEventId}
               />
-
-              {calendars.length > 0 && (
-                <div className="border-t border-gray-100 pt-3 dark:border-gray-800">
-                  <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">Calendars</p>
-                  <ul className="space-y-1">
-                    {calendars.map((c) => (
-                      <li key={c.id} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color || '#6366f1' }} />
-                        <span className="truncate">{c.name}</span>
-                      </li>
-                    ))}
-                  </ul>
+              <aside className="card p-5 space-y-4 sticky top-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-400">{selectedDay ? 'Events on' : 'Upcoming'}</p>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {selectedDay ? fromKey(selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : headerLabel}
+                  </h3>
                 </div>
-              )}
-            </aside>
-          </div>
+                <EventList
+                  events={selectedDay
+                    ? eventsByDay.get(selectedDay) || []
+                    : events.filter((ev) => dayKeyInZone(ev.start, timeZone, ev.allDay) >= todayKey).slice(0, 12)}
+                  timeZone={timeZone}
+                  emptyText={selectedDay ? 'Nothing scheduled this day.' : 'No upcoming events in this range.'}
+                  onOpen={setOpenEventId}
+                />
+              </aside>
+            </div>
+          ) : (
+            <TimeGridView
+              days={range.days}
+              eventsByDay={eventsByDay}
+              todayKey={todayKey}
+              timeZone={timeZone}
+              onOpenEvent={setOpenEventId}
+            />
+          )}
         </>
+      )}
+
+      {openEvent && (
+        <EventModal
+          event={openEvent}
+          timeZone={timeZone}
+          onClose={() => setOpenEventId(null)}
+          onSaved={handleSaved}
+          onRemoved={handleRemoved}
+        />
       )}
     </div>
   );
 }
 
-function EventList({ events, timeZone, emptyText }) {
-  if (!events.length) {
-    return <p className="text-sm text-gray-400">{emptyText}</p>;
-  }
+/* ------------------------------------------------------------------ */
+/* Month grid                                                          */
+/* ------------------------------------------------------------------ */
+
+function MonthView({ grid, eventsByDay, todayKey, selectedDay, timeZone, onSelectDay, onOpenEvent }) {
   return (
-    <ul className="space-y-3">
+    <div className="card overflow-hidden">
+      <div className="grid grid-cols-7 bg-gray-50 text-center text-xs uppercase tracking-wide text-gray-500 dark:bg-gray-800/60">
+        {WEEKDAYS.map((d) => <div key={d} className="py-2 font-medium">{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 border-t border-gray-100 dark:border-gray-800">
+        {grid.map((cell) => {
+          const dayEvents = eventsByDay.get(cell.key) || [];
+          const isToday = cell.key === todayKey;
+          const isSelected = cell.key === selectedDay;
+          return (
+            <div
+              key={cell.key}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelectDay(cell.key)}
+              onKeyDown={(e) => { if (e.key === 'Enter') onSelectDay(cell.key); }}
+              className={`min-h-[104px] p-1.5 text-left border-b border-r border-gray-100 transition-colors cursor-pointer dark:border-gray-800 ${
+                cell.inMonth ? '' : 'bg-gray-50/60 text-gray-400 dark:bg-gray-900/40'
+              } ${isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}
+            >
+              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
+                isToday ? 'bg-primary-600 text-white' : cell.inMonth ? 'text-gray-800 dark:text-gray-200' : ''
+              }`}>
+                {cell.date.getDate()}
+              </span>
+              <div className="mt-1 space-y-0.5">
+                {dayEvents.slice(0, 3).map((ev) => (
+                  <EventChip key={ev.id} ev={ev} timeZone={timeZone} onOpen={onOpenEvent} />
+                ))}
+                {dayEvents.length > 3 && (
+                  <div className="text-[11px] text-gray-500 px-1">+{dayEvents.length - 3} more</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EventChip({ ev, timeZone, onOpen }) {
+  const color = ev.color || DEFAULT_COLOR;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onOpen(ev.id); }}
+      className="block w-full truncate rounded px-1 py-0.5 text-left text-[11px] leading-tight text-gray-800 hover:brightness-95 dark:text-gray-100"
+      style={{ backgroundColor: `${color}33`, borderLeft: `3px solid ${color}` }}
+      title={`${eventLabel(ev)}${ev.stage ? ` (${stageLabel(ev.stage)})` : ''}`}
+      data-event-chip
+    >
+      {!ev.allDay && <span className="text-gray-500 dark:text-gray-300 mr-1">{formatInTimeZone(ev.start, timeZone, 'HH:mm')}</span>}
+      {eventLabel(ev)}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Day / Week time grid                                                */
+/* ------------------------------------------------------------------ */
+
+// Assign overlapping events to side-by-side lanes.
+function layoutDay(dayEvents, timeZone, dayKey) {
+  const timed = dayEvents
+    .filter((ev) => !ev.allDay)
+    .map((ev) => {
+      const start = minutesInZone(ev.start, timeZone);
+      let end = ev.end ? minutesInZone(ev.end, timeZone) : start + 30;
+      if (ev.end && dayKeyInZone(ev.end, timeZone, false) !== dayKey) end = 24 * 60;
+      if (end <= start) end = start + 30;
+      return { ev, start, end };
+    })
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const placed = [];
+  let cluster = [];
+  let clusterEnd = -1;
+  const flush = () => {
+    const lanes = [];
+    for (const item of cluster) {
+      let lane = lanes.findIndex((laneEnd) => laneEnd <= item.start);
+      if (lane < 0) { lanes.push(item.end); lane = lanes.length - 1; } else lanes[lane] = item.end;
+      item.lane = lane;
+    }
+    for (const item of cluster) { item.lanes = lanes.length; placed.push(item); }
+    cluster = [];
+  };
+  for (const item of timed) {
+    if (cluster.length && item.start >= clusterEnd) flush();
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  if (cluster.length) flush();
+  return placed;
+}
+
+function TimeGridView({ days, eventsByDay, todayKey, timeZone, onOpenEvent }) {
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 8 * HOUR_PX;
+  }, [days.length]);
+
+  const hours = Array.from({ length: 24 }, (_, h) => h);
+  const cols = days.length;
+  const template = `56px repeat(${cols}, minmax(0, 1fr))`;
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="grid border-b border-gray-100 dark:border-gray-800" style={{ gridTemplateColumns: template }}>
+        <div />
+        {days.map((d) => {
+          const key = keyOf(d);
+          const isToday = key === todayKey;
+          return (
+            <div key={key} className="py-2 text-center border-l border-gray-100 dark:border-gray-800">
+              <div className="text-[11px] uppercase tracking-wide text-gray-500">{WEEKDAYS[d.getDay()]}</div>
+              <div className={`mx-auto mt-0.5 w-7 h-7 rounded-full inline-flex items-center justify-center text-sm font-semibold ${
+                isToday ? 'bg-primary-600 text-white' : 'text-gray-800 dark:text-gray-200'
+              }`}>
+                {d.getDate()}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid border-b border-gray-100 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-900/30" style={{ gridTemplateColumns: template }}>
+        <div className="text-[10px] text-gray-400 px-1 py-1 text-right">all-day</div>
+        {days.map((d) => {
+          const key = keyOf(d);
+          const allDay = (eventsByDay.get(key) || []).filter((ev) => ev.allDay);
+          return (
+            <div key={key} className="min-h-[28px] p-1 space-y-0.5 border-l border-gray-100 dark:border-gray-800">
+              {allDay.map((ev) => <EventChip key={ev.id} ev={ev} timeZone={timeZone} onOpen={onOpenEvent} />)}
+            </div>
+          );
+        })}
+      </div>
+
+      <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: '68vh' }}>
+        <div className="grid relative" style={{ gridTemplateColumns: template, height: 24 * HOUR_PX }}>
+          <div className="relative">
+            {hours.map((h) => (
+              <div key={h} className="absolute right-1 text-[10px] text-gray-400 -translate-y-1/2" style={{ top: h * HOUR_PX }}>
+                {h === 0 ? '' : `${pad(h)}:00`}
+              </div>
+            ))}
+          </div>
+          {days.map((d) => {
+            const key = keyOf(d);
+            const placed = layoutDay(eventsByDay.get(key) || [], timeZone, key);
+            return (
+              <div key={key} className="relative border-l border-gray-100 dark:border-gray-800">
+                {hours.map((h) => (
+                  <div key={h} className="absolute inset-x-0 border-t border-gray-100 dark:border-gray-800/80" style={{ top: h * HOUR_PX }} />
+                ))}
+                {placed.map(({ ev, start, end, lane, lanes }) => {
+                  const color = ev.color || DEFAULT_COLOR;
+                  const top = (start / 60) * HOUR_PX;
+                  const height = Math.max(22, ((end - start) / 60) * HOUR_PX - 2);
+                  const width = 100 / lanes;
+                  return (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      onClick={() => onOpenEvent(ev.id)}
+                      className="absolute rounded px-1.5 py-0.5 text-left text-[11px] leading-tight overflow-hidden text-gray-900 hover:brightness-95 dark:text-gray-100"
+                      style={{ top, height, left: `calc(${lane * width}% + 2px)`, width: `calc(${width}% - 4px)`, backgroundColor: `${color}33`, borderLeft: `3px solid ${color}` }}
+                      title={`${eventLabel(ev)} · ${timeRange(ev, timeZone)}`}
+                      data-event-chip
+                    >
+                      <div className="font-medium truncate">{eventLabel(ev)}</div>
+                      <div className="text-gray-600 dark:text-gray-300 truncate">{timeRange(ev, timeZone)}{ev.stage ? ` · ${stageLabel(ev.stage)}` : ''}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Event list (side panel)                                             */
+/* ------------------------------------------------------------------ */
+
+function EventList({ events, timeZone, emptyText, onOpen }) {
+  if (!events.length) return <p className="text-sm text-gray-400">{emptyText}</p>;
+  return (
+    <ul className="space-y-2">
       {events.map((ev) => (
-        <li key={`${ev.calendarId}-${ev.id}`} className="flex gap-3">
-          <span className="w-1 rounded-full shrink-0" style={{ backgroundColor: ev.color || '#6366f1' }} />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{ev.title}</p>
-            <p className="text-xs text-gray-500">
-              {ev.allDay
-                ? `All day · ${new Date(`${ev.start.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                : `${formatInTimeZone(ev.start, timeZone, 'MMM d, HH:mm')}${ev.end ? ` – ${formatInTimeZone(ev.end, timeZone, 'HH:mm')}` : ''}`}
-            </p>
-            {ev.location && <p className="text-xs text-gray-500 truncate">{ev.location}</p>}
-            <div className="flex gap-3 mt-1">
-              {ev.hangoutLink && (
-                <a href={ev.hangoutLink} target="_blank" rel="noreferrer" className="text-xs text-primary-600 hover:underline">Join call</a>
-              )}
-              {ev.htmlLink && (
-                <a href={ev.htmlLink} target="_blank" rel="noreferrer" className="text-xs text-gray-500 hover:underline">Open in Google</a>
+        <li key={ev.id}>
+          <button
+            type="button"
+            onClick={() => onOpen(ev.id)}
+            className="w-full flex gap-3 text-left rounded-lg p-2 -m-2 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+          >
+            <span className="w-1 rounded-full shrink-0" style={{ backgroundColor: ev.color || DEFAULT_COLOR }} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{eventLabel(ev)}</p>
+              <p className="text-xs text-gray-500">
+                {ev.allDay
+                  ? `All day · ${fromKey(ev.start.slice(0, 10)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                  : `${formatInTimeZone(ev.start, timeZone, 'MMM d, HH:mm')}${ev.end ? ` – ${formatInTimeZone(ev.end, timeZone, 'HH:mm')}` : ''}`}
+              </p>
+              {ev.stage && (
+                <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${STAGE_META[ev.stage].className}`}>
+                  {stageLabel(ev.stage)}
+                </span>
               )}
             </div>
-          </div>
+          </button>
         </li>
       ))}
     </ul>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Event detail / edit modal                                           */
+/* ------------------------------------------------------------------ */
+
+async function downloadWithAuth(url, filename) {
+  const token = localStorage.getItem('authToken');
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}
+
+function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
+  const startLocal = toLocalInputs(event.start, timeZone, event.allDay);
+  const endLocal = toLocalInputs(event.end, timeZone, event.allDay);
+
+  const [title, setTitle] = useState(event.title || '');
+  const [companyName, setCompanyName] = useState(event.companyName || '');
+  const [jobTitle, setJobTitle] = useState(event.jobTitle || '');
+  const [stage, setStage] = useState(event.stage || '');
+  const [allDay, setAllDay] = useState(Boolean(event.allDay));
+  const [startDate, setStartDate] = useState(startLocal.date);
+  const [startTime, setStartTime] = useState(startLocal.time);
+  const [endDate, setEndDate] = useState(endLocal.date);
+  const [endTime, setEndTime] = useState(endLocal.time);
+  const [meetingLink, setMeetingLink] = useState(event.meetingLink || '');
+  const [location, setLocation] = useState(event.location || '');
+  const [attendees, setAttendees] = useState(event.attendees || []);
+  const [description, setDescription] = useState(event.description || '');
+  const [jdLink, setJdLink] = useState(event.jdLink || '');
+  const [resumeLink, setResumeLink] = useState(event.resumeLink || '');
+  const [application, setApplication] = useState(event.application || null);
+  const [notes, setNotes] = useState(event.notes || '');
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [showImport, setShowImport] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const updateAttendee = (i, patch) => setAttendees((prev) => prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
+  const removeAttendee = (i) => setAttendees((prev) => prev.filter((_, idx) => idx !== i));
+  const addAttendee = () => setAttendees((prev) => [...prev, { name: '', email: '', status: '' }]);
+
+  const applyApplication = (app) => {
+    setApplication({
+      id: app.id,
+      companyName: app.companyName,
+      jobTitle: app.jobTitle,
+      jdLink: app.jdLink,
+      appliedAt: app.appliedAt,
+      hasDoc: Boolean(app.cvDocUrl),
+      hasPdf: Boolean(app.cvPdfUrl)
+    });
+    if (!companyName.trim()) setCompanyName(app.companyName || '');
+    if (!jobTitle.trim()) setJobTitle(app.jobTitle || '');
+    if (!jdLink.trim() && app.jdLink) setJdLink(app.jdLink);
+    setShowImport(false);
+  };
+
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      let start;
+      let end;
+      if (!startDate) throw new Error('Start date is required');
+      if (allDay) {
+        start = `${startDate}T00:00:00.000Z`;
+        const endBase = endDate && endDate > startDate ? endDate : keyOf(addDays(fromKey(startDate), 1));
+        end = `${endBase}T00:00:00.000Z`;
+      } else {
+        start = localInputsToIso(startDate, startTime, timeZone);
+        end = localInputsToIso(endDate || startDate, endTime || startTime, timeZone);
+        if (new Date(end) < new Date(start)) throw new Error('End must be after start');
+      }
+      // Send only what changed: every field sent is marked user-edited on the server, and
+      // user-edited fields are no longer refreshed from Google on sync.
+      const next = {
+        title,
+        companyName,
+        jobTitle,
+        stage: stage || null,
+        allDay,
+        start,
+        end,
+        meetingLink,
+        location,
+        attendees,
+        description,
+        jdLink,
+        resumeLink,
+        applicationId: application?.id || null,
+        notes
+      };
+      const original = {
+        title: event.title || '',
+        companyName: event.companyName || '',
+        jobTitle: event.jobTitle || '',
+        stage: event.stage || null,
+        allDay: Boolean(event.allDay),
+        start: event.start,
+        end: event.end,
+        meetingLink: event.meetingLink || '',
+        location: event.location || '',
+        attendees: event.attendees || [],
+        description: event.description || '',
+        jdLink: event.jdLink || '',
+        resumeLink: event.resumeLink || '',
+        applicationId: event.applicationId || null,
+        notes: event.notes || ''
+      };
+      const patch = {};
+      for (const key of Object.keys(next)) {
+        const same = key === 'attendees'
+          ? JSON.stringify(next[key].map((x) => [x.name || '', x.email || ''])) === JSON.stringify(original[key].map((x) => [x.name || '', x.email || '']))
+          : (key === 'start' || key === 'end')
+            ? new Date(next[key]).getTime() === new Date(original[key]).getTime()
+            : next[key] === original[key];
+        if (!same) patch[key] = next[key];
+      }
+      if (Object.keys(patch).length === 0) {
+        onClose();
+        return;
+      }
+      const res = await calendarAPI.updateEvent(event.id, patch);
+      onSaved(res.data.event);
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm('Remove this event from the board? It stays in Google Calendar.')) return;
+    setSaving(true);
+    try {
+      await calendarAPI.removeEvent(event.id);
+      onRemoved(event.id);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to remove');
+      setSaving(false);
+    }
+  };
+
+  const download = async (type) => {
+    try {
+      const url = type === 'pdf' ? cvAPI.downloadPdfUrl(application.id) : cvAPI.downloadDocUrl(application.id);
+      await downloadWithAuth(url, `resume-${(application.companyName || 'resume').replace(/\s+/g, '-')}.${type}`);
+    } catch (err) {
+      setError(err.message || 'Download failed');
+    }
+  };
+
+  const color = event.color || DEFAULT_COLOR;
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center p-4">
+      <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Close" />
+      <form onSubmit={save} className="relative w-full max-w-3xl card p-0 shadow-xl max-h-[92vh] flex flex-col" data-event-modal>
+        <div className="flex items-start justify-between gap-3 p-5 border-b border-gray-100 dark:border-gray-800" style={{ borderTop: `4px solid ${color}` }}>
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-gray-400">{event.calendarName || 'Google Calendar'}</p>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{eventLabel({ ...event, companyName, jobTitle, title })}</h3>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {event.allDay
+                ? `All day · ${fromKey(event.start.slice(0, 10)).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
+                : `${formatInTimeZone(event.start, timeZone, 'EEE, MMM d · HH:mm')}${event.end ? ` – ${formatInTimeZone(event.end, timeZone, 'HH:mm')}` : ''}`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {meetingLink && (
+              <a href={meetingLink} target="_blank" rel="noreferrer" className="btn btn-primary py-1.5 px-3 text-xs">Join call</a>
+            )}
+            {event.htmlLink && (
+              <a href={event.htmlLink} target="_blank" rel="noreferrer" className="btn btn-secondary py-1.5 px-3 text-xs">Open in Google</a>
+            )}
+            <button type="button" className="text-gray-400 hover:text-gray-700 px-1" onClick={onClose} aria-label="Close">✕</button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto p-5 space-y-5">
+          {error && (
+            <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 dark:bg-red-900/30 dark:text-red-200">{error}</div>
+          )}
+
+          <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block sm:col-span-2">
+              <span className="label">Event title</span>
+              <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="label">Company name</span>
+              <input className="input" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. Acme Corp" />
+            </label>
+            <label className="block">
+              <span className="label">Role</span>
+              <input className="input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Senior Engineer" />
+            </label>
+            <label className="block">
+              <span className="label">Stage</span>
+              <select className="input" value={stage} onChange={(e) => setStage(e.target.value)}>
+                <option value="">— Not an interview / unknown —</option>
+                {Object.entries(STAGE_META).map(([id, meta]) => <option key={id} value={id}>{meta.label}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="label">Meeting link</span>
+              <input className="input" value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} placeholder="https://meet.google.com/…" />
+            </label>
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Date & time</p>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+                All day
+              </label>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <label className="block">
+                <span className="label">Start date</span>
+                <input type="date" className="input" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+              </label>
+              {!allDay && (
+                <label className="block">
+                  <span className="label">Start time</span>
+                  <input type="time" className="input" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                </label>
+              )}
+              <label className="block">
+                <span className="label">End date</span>
+                <input type="date" className="input" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </label>
+              {!allDay && (
+                <label className="block">
+                  <span className="label">End time</span>
+                  <input type="time" className="input" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                </label>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">Times are in {timeZone}.</p>
+            <label className="block">
+              <span className="label">Location</span>
+              <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} />
+            </label>
+          </section>
+
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Invited people</p>
+              <button type="button" className="text-xs text-primary-600 hover:underline" onClick={addAttendee}>+ Add person</button>
+            </div>
+            {attendees.length === 0 && <p className="text-sm text-gray-400">No attendees.</p>}
+            <div className="space-y-2">
+              {attendees.map((a, i) => (
+                <div key={i} className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                  <input className="input flex-1 min-w-[140px]" placeholder="Name" value={a.name || ''} onChange={(e) => updateAttendee(i, { name: e.target.value })} />
+                  <input className="input flex-[1.4] min-w-[180px]" placeholder="email@company.com" value={a.email || ''} onChange={(e) => updateAttendee(i, { email: e.target.value })} />
+                  <span className="text-[11px] text-gray-400 w-20 shrink-0">
+                    {a.organizer ? 'organizer' : a.self ? 'you' : (a.status || '').replace('needsAction', 'pending')}
+                  </span>
+                  <button type="button" className="text-gray-400 hover:text-red-600 px-1" onClick={() => removeAttendee(i)} aria-label="Remove attendee">✕</button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Description</p>
+            <textarea className="input min-h-[110px]" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Meeting description" />
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Resume & job description</p>
+              <button type="button" className="btn btn-secondary py-1 px-3 text-xs" onClick={() => setShowImport((v) => !v)}>
+                {showImport ? 'Close' : 'Import from application history'}
+              </button>
+            </div>
+
+            {showImport && <ApplicationPicker initialQuery={companyName} onPick={applyApplication} />}
+
+            <div className="rounded-lg border border-gray-100 p-3 dark:border-gray-800">
+              <p className="text-xs text-gray-500 mb-1">Resume</p>
+              {application ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm">
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{application.companyName}</span>
+                    {application.jobTitle && <span className="text-gray-500"> — {application.jobTitle}</span>}
+                    {application.appliedAt && (
+                      <span className="text-xs text-gray-400 ml-2">
+                        applied {formatInTimeZone(application.appliedAt, timeZone, 'MMM d, yyyy')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="btn btn-secondary py-1 px-2 text-xs" onClick={() => download('pdf')}>PDF</button>
+                    <button type="button" className="btn btn-secondary py-1 px-2 text-xs" onClick={() => download('docx')}>DOCX</button>
+                    <button type="button" className="text-xs text-gray-400 hover:text-red-600" onClick={() => setApplication(null)}>Unlink</button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">No resume linked. Import one from your application history, or paste a link below.</p>
+              )}
+              <input className="input mt-2" value={resumeLink} onChange={(e) => setResumeLink(e.target.value)} placeholder="Resume link (optional, e.g. Google Drive)" />
+            </div>
+
+            <label className="block">
+              <span className="label">Job description link</span>
+              <input className="input" value={jdLink} onChange={(e) => setJdLink(e.target.value)} placeholder="https://…" />
+            </label>
+          </section>
+
+          <section className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Your notes</p>
+            <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Prep notes, questions to ask, feedback…" />
+          </section>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-t border-gray-100 dark:border-gray-800">
+          <button type="button" className="btn btn-danger" disabled={saving} onClick={remove}>Remove from board</button>
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-secondary" disabled={saving} onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ApplicationPicker({ initialQuery, onPick }) {
+  const [q, setQ] = useState(initialQuery || '');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const seq = useRef(0);
+
+  useEffect(() => {
+    const id = setTimeout(async () => {
+      const mine = ++seq.current;
+      setLoading(true);
+      try {
+        const res = await applicationsAPI.getAll({ search: q.trim() || undefined, limit: 10, page: 1 });
+        if (mine !== seq.current) return;
+        setRows(res.data?.applications || []);
+        setError('');
+      } catch (err) {
+        if (mine !== seq.current) return;
+        setError(err.response?.data?.error || 'Failed to load applications');
+      } finally {
+        if (mine === seq.current) setLoading(false);
+      }
+    }, q ? 250 : 0);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  return (
+    <div className="rounded-lg border border-primary-100 bg-primary-50/40 p-3 space-y-2 dark:border-primary-900/40 dark:bg-primary-900/10">
+      <input autoFocus className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search applications by company…" />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
+        {loading && rows.length === 0 ? (
+          <p className="p-3 text-sm text-gray-400">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="p-3 text-sm text-gray-400">No applications match. Generate a CV for this company first.</p>
+        ) : (
+          rows.map((app) => (
+            <button
+              key={app.id}
+              type="button"
+              onClick={() => onPick(app)}
+              className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/60"
+            >
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{app.companyName}</p>
+              <p className="text-xs text-gray-500">
+                {app.jobTitle || 'Unknown role'}
+                {app.appliedAt ? ` · ${new Date(app.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                {app.cvPdfUrl || app.cvDocUrl ? ' · resume ready' : ''}
+              </p>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 

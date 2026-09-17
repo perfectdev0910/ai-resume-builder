@@ -128,8 +128,12 @@ export const cvAPI = {
 export const calendarAPI = {
   getGoogleStatus: () => api.get('/calendar/google/status'),
   getGoogleAuthUrl: () => api.get('/calendar/google/auth-url'),
-  getGoogleEvents: (from, to) => api.get('/calendar/google/events', { params: { from, to } }),
-  disconnectGoogle: () => api.delete('/calendar/google')
+  syncGoogle: () => api.post('/calendar/google/sync'),
+  disconnectGoogle: () => api.delete('/calendar/google'),
+  getEvents: (from, to) => api.get('/calendar/events', { params: { from, to } }),
+  getEvent: (id) => api.get(`/calendar/events/${id}`),
+  updateEvent: (id, data) => api.put(`/calendar/events/${id}`, data),
+  removeEvent: (id) => api.delete(`/calendar/events/${id}`)
 };
 
 // Applications API

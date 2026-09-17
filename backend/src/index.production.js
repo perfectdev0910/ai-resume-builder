@@ -118,6 +118,8 @@ async function startServer() {
       console.log('📅 Cleanup cron job scheduled (daily at 2 AM)');
     }
 
+    calendarRoutes.startAutoSync();
+
     app.listen(PORT, () => {
       console.log(`🚀 AI Resume Builder API running on port ${PORT}`);
       console.log(`📦 Storage provider: ${process.env.STORAGE_PROVIDER || 'supabase'}`);

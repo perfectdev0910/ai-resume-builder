@@ -237,10 +237,47 @@ async function initDatabase() {
         refresh_token TEXT,
         scope TEXT,
         expires_at TIMESTAMPTZ,
+        last_synced_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await client.query(`ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ`);
+
+    // Events synced from Google Calendar, enriched with interview details the user can edit
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS calendar_events (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        google_calendar_id TEXT NOT NULL,
+        google_event_id TEXT NOT NULL,
+        calendar_name TEXT,
+        color TEXT,
+        title TEXT,
+        company_name TEXT,
+        job_title TEXT,
+        stage VARCHAR(50),
+        meeting_link TEXT,
+        start_at TIMESTAMPTZ,
+        end_at TIMESTAMPTZ,
+        all_day BOOLEAN DEFAULT FALSE,
+        attendees TEXT,
+        description TEXT,
+        location TEXT,
+        html_link TEXT,
+        application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
+        jd_link TEXT,
+        resume_link TEXT,
+        notes TEXT,
+        edited_fields TEXT,
+        hidden BOOLEAN DEFAULT FALSE,
+        synced_at TIMESTAMPTZ,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, google_calendar_id, google_event_id)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_calendar_events_user_start ON calendar_events(user_id, start_at)`);
 
     // Data migrations for old column names -> new ones (outside any txn; ignore missing columns)
     const optionalMigrations = [
