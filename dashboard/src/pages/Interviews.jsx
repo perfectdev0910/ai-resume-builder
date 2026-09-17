@@ -117,10 +117,15 @@ function connectedMonthStart(status) {
   return new Date(base.getFullYear(), base.getMonth(), 1);
 }
 
+// SQLite returns "yyyy-mm-dd HH:MM:SS" in UTC without a zone marker; Postgres returns ISO.
+function parseServerDate(value) {
+  const raw = String(value || '');
+  return new Date(/^d{4}-d{2}-d{2} d{2}:d{2}:d{2}$/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw);
+}
+
 function relativeTime(value) {
   if (!value) return '';
-  const raw = String(value);
-  const d = new Date(/^d{4}-d{2}-d{2} d{2}:d{2}:d{2}$/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw);
+  const d = parseServerDate(value);
   const diff = Math.max(0, Date.now() - d.getTime());
   const min = Math.round(diff / 60000);
   if (min < 1) return 'just now';
@@ -213,8 +218,7 @@ function CalendarTab() {
   const [events, setEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [eventsError, setEventsError] = useState('');
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [openEventId, setOpenEventId] = useState(null);
+  const [selectedEventId, setSelectedEventId] = useState(null);
 
   const minMonth = useMemo(() => connectedMonthStart(status), [status?.connectedAt]);
 
@@ -286,24 +290,45 @@ function CalendarTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status?.connected, view, keyOf(cursor)]);
 
-  // The server re-syncs with Google every 5 minutes; pick up its changes on the same
-  // cadence and whenever the tab regains focus. Skipped while an event is being edited.
+  // Keep the board live: the server re-syncs every 5 minutes, but when the user is actually
+  // looking (page opened / tab focused) we sync right away if the last sync is older than
+  // 20 seconds, and poll the database every minute so deletions and changes show up quickly.
+  const lastSyncRef = useRef(0);
+  useEffect(() => {
+    lastSyncRef.current = status?.lastSyncedAt ? parseServerDate(status.lastSyncedAt).getTime() : 0;
+  }, [status?.lastSyncedAt]);
+
   useEffect(() => {
     if (!status?.connected) return undefined;
-    const refresh = () => {
-      if (document.hidden || openEventId) return;
+    let cancelled = false;
+    const refresh = async ({ forceSync = false } = {}) => {
+      if (document.hidden || cancelled) return;
+      const stale = Date.now() - lastSyncRef.current > 20 * 1000;
+      if (forceSync && stale) {
+        try {
+          await calendarAPI.syncGoogle();
+          lastSyncRef.current = Date.now();
+        } catch {
+          // background sync failures are silent; the manual button reports errors
+        }
+      }
+      if (cancelled) return;
       loadStatus();
       loadEvents();
     };
-    const id = setInterval(refresh, 5 * 60 * 1000);
-    const onVisible = () => { if (!document.hidden) refresh(); };
+    refresh({ forceSync: true });
+    const id = setInterval(() => refresh({ forceSync: false }), 60 * 1000);
+    const onVisible = () => { if (!document.hidden) refresh({ forceSync: true }); };
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
     return () => {
+      cancelled = true;
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status?.connected, view, keyOf(cursor), openEventId]);
+  }, [status?.connected, view, keyOf(cursor)]);
 
   /* ---- Google connection (popup) ---- */
 
@@ -385,7 +410,7 @@ function CalendarTab() {
     try {
       await calendarAPI.disconnectGoogle();
       setEvents([]);
-      setSelectedDay(null);
+      setSelectedEventId(null);
       setNotice('Google Calendar disconnected.');
       await loadStatus();
     } catch (err) {
@@ -401,7 +426,6 @@ function CalendarTab() {
     : view === 'week' ? startOfWeek(cursor) <= minMonth : cursor <= minMonth;
 
   const shift = (delta) => {
-    setSelectedDay(null);
     setCursor((prev) => {
       let next;
       if (view === 'month') next = new Date(prev.getFullYear(), prev.getMonth() + delta, 1);
@@ -416,7 +440,6 @@ function CalendarTab() {
   const goToday = () => {
     const today = fromKey(todayKey);
     setCursor(clampToMin(today));
-    setSelectedDay(today < minMonth ? null : todayKey);
   };
 
   const headerLabel = (() => {
@@ -444,7 +467,13 @@ function CalendarTab() {
     return map;
   }, [events, timeZone]);
 
-  const openEvent = useMemo(() => events.find((e) => e.id === openEventId) || null, [events, openEventId]);
+  // Side panel: the clicked event, otherwise the first upcoming one (or the first in view).
+  const panelEvent = useMemo(() => {
+    const selected = events.find((e) => e.id === selectedEventId);
+    if (selected) return selected;
+    const nowIso = new Date().toISOString();
+    return events.find((e) => (e.end || e.start) >= nowIso) || events[0] || null;
+  }, [events, selectedEventId]);
 
   const handleSaved = (updated) => {
     setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
@@ -452,7 +481,7 @@ function CalendarTab() {
 
   const handleRemoved = (id) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
-    setOpenEventId(null);
+    setSelectedEventId(null);
   };
 
   /* ---- Render ---- */
@@ -526,7 +555,7 @@ function CalendarTab() {
                   <button
                     key={v.id}
                     type="button"
-                    onClick={() => { setView(v.id); setSelectedDay(null); }}
+                    onClick={() => setView(v.id)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       view === v.id ? 'bg-primary-600 text-white' : 'text-gray-600 hover:text-gray-900 dark:text-gray-300'
                     }`}
@@ -562,54 +591,45 @@ function CalendarTab() {
             </div>
           )}
 
-          {view === 'month' ? (
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.8fr)] gap-4 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.9fr)] gap-4 items-start">
+            {view === 'month' ? (
               <MonthView
                 grid={range.grid}
                 eventsByDay={eventsByDay}
                 todayKey={todayKey}
-                selectedDay={selectedDay}
+                selectedEventId={panelEvent?.id || null}
                 timeZone={timeZone}
-                onSelectDay={setSelectedDay}
-                onOpenEvent={setOpenEventId}
+                onOpenEvent={setSelectedEventId}
               />
-              <aside className="card p-5 space-y-4 sticky top-4">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-400">{selectedDay ? 'Events on' : 'Upcoming'}</p>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                    {selectedDay ? fromKey(selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : headerLabel}
-                  </h3>
-                </div>
-                <EventList
-                  events={selectedDay
-                    ? eventsByDay.get(selectedDay) || []
-                    : events.filter((ev) => dayKeyInZone(ev.start, timeZone, ev.allDay) >= todayKey).slice(0, 12)}
-                  timeZone={timeZone}
-                  emptyText={selectedDay ? 'Nothing scheduled this day.' : 'No upcoming events in this range.'}
-                  onOpen={setOpenEventId}
-                />
-              </aside>
-            </div>
-          ) : (
-            <TimeGridView
-              days={range.days}
-              eventsByDay={eventsByDay}
-              todayKey={todayKey}
-              timeZone={timeZone}
-              onOpenEvent={setOpenEventId}
-            />
-          )}
-        </>
-      )}
+            ) : (
+              <TimeGridView
+                days={range.days}
+                eventsByDay={eventsByDay}
+                todayKey={todayKey}
+                selectedEventId={panelEvent?.id || null}
+                timeZone={timeZone}
+                onOpenEvent={setSelectedEventId}
+              />
+            )}
 
-      {openEvent && (
-        <EventModal
-          event={openEvent}
-          timeZone={timeZone}
-          onClose={() => setOpenEventId(null)}
-          onSaved={handleSaved}
-          onRemoved={handleRemoved}
-        />
+            <aside className="sticky top-4" data-event-panel>
+              {panelEvent ? (
+                <EventEditor
+                  key={panelEvent.id}
+                  event={panelEvent}
+                  timeZone={timeZone}
+                  isDefault={panelEvent.id !== selectedEventId}
+                  onSaved={handleSaved}
+                  onRemoved={handleRemoved}
+                />
+              ) : (
+                <div className="card p-8 text-center text-gray-400 text-sm">
+                  No events in this range. Click an event on the calendar to see and edit its details here.
+                </div>
+              )}
+            </aside>
+          </div>
+        </>
       )}
     </div>
   );
@@ -619,7 +639,7 @@ function CalendarTab() {
 /* Month grid                                                          */
 /* ------------------------------------------------------------------ */
 
-function MonthView({ grid, eventsByDay, todayKey, selectedDay, timeZone, onSelectDay, onOpenEvent }) {
+function MonthView({ grid, eventsByDay, todayKey, selectedEventId, timeZone, onOpenEvent }) {
   return (
     <div className="card overflow-hidden">
       <div className="grid grid-cols-7 bg-gray-50 text-center text-xs uppercase tracking-wide text-gray-500 dark:bg-gray-800/60">
@@ -629,17 +649,17 @@ function MonthView({ grid, eventsByDay, todayKey, selectedDay, timeZone, onSelec
         {grid.map((cell) => {
           const dayEvents = eventsByDay.get(cell.key) || [];
           const isToday = cell.key === todayKey;
-          const isSelected = cell.key === selectedDay;
+          const isSelected = dayEvents.some((ev) => ev.id === selectedEventId);
           return (
             <div
               key={cell.key}
               role="button"
               tabIndex={0}
-              onClick={() => onSelectDay(cell.key)}
-              onKeyDown={(e) => { if (e.key === 'Enter') onSelectDay(cell.key); }}
+              onClick={() => { if (dayEvents[0]) onOpenEvent(dayEvents[0].id); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && dayEvents[0]) onOpenEvent(dayEvents[0].id); }}
               className={`min-h-[104px] p-1.5 text-left border-b border-r border-gray-100 transition-colors cursor-pointer dark:border-gray-800 ${
                 cell.inMonth ? '' : 'bg-gray-50/60 text-gray-400 dark:bg-gray-900/40'
-              } ${isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}
+              } ${isSelected ? 'bg-primary-50/70 dark:bg-primary-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}
             >
               <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
                 isToday ? 'bg-primary-600 text-white' : cell.inMonth ? 'text-gray-800 dark:text-gray-200' : ''
@@ -648,7 +668,7 @@ function MonthView({ grid, eventsByDay, todayKey, selectedDay, timeZone, onSelec
               </span>
               <div className="mt-1 space-y-0.5">
                 {dayEvents.slice(0, 3).map((ev) => (
-                  <EventChip key={ev.id} ev={ev} timeZone={timeZone} onOpen={onOpenEvent} />
+                  <EventChip key={ev.id} ev={ev} timeZone={timeZone} onOpen={onOpenEvent} selected={ev.id === selectedEventId} />
                 ))}
                 {dayEvents.length > 3 && (
                   <div className="text-[11px] text-gray-500 px-1">+{dayEvents.length - 3} more</div>
@@ -662,13 +682,13 @@ function MonthView({ grid, eventsByDay, todayKey, selectedDay, timeZone, onSelec
   );
 }
 
-function EventChip({ ev, timeZone, onOpen }) {
+function EventChip({ ev, timeZone, onOpen, selected = false }) {
   const color = ev.color || DEFAULT_COLOR;
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onOpen(ev.id); }}
-      className="block w-full truncate rounded px-1 py-0.5 text-left text-[11px] leading-tight text-gray-800 hover:brightness-95 dark:text-gray-100"
+      className={`block w-full truncate rounded px-1 py-0.5 text-left text-[11px] leading-tight text-gray-800 hover:brightness-95 dark:text-gray-100 ${selected ? 'ring-2 ring-primary-500' : ''}`}
       style={{ backgroundColor: `${color}33`, borderLeft: `3px solid ${color}` }}
       title={`${eventLabel(ev)}${ev.stage ? ` (${stageLabel(ev.stage)})` : ''}`}
       data-event-chip
@@ -718,11 +738,26 @@ function layoutDay(dayEvents, timeZone, dayKey) {
   return placed;
 }
 
-function TimeGridView({ days, eventsByDay, todayKey, timeZone, onOpenEvent }) {
+function TimeGridView({ days, eventsByDay, todayKey, selectedEventId, timeZone, onOpenEvent }) {
   const scrollRef = useRef(null);
+
+  // Current time in the profile zone, refreshed every minute, for the red "now" line.
+  const [nowMinutes, setNowMinutes] = useState(() => minutesInZone(new Date().toISOString(), timeZone));
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 8 * HOUR_PX;
-  }, [days.length]);
+    const tick = () => setNowMinutes(minutesInZone(new Date().toISOString(), timeZone));
+    tick();
+    const id = setInterval(tick, 60 * 1000);
+    return () => clearInterval(id);
+  }, [timeZone]);
+
+  const todayVisible = days.some((d) => keyOf(d) === todayKey);
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    // Open around the current time when today is on screen, otherwise at 8am.
+    const target = todayVisible ? Math.max(0, (nowMinutes / 60) * HOUR_PX - 3 * HOUR_PX) : 8 * HOUR_PX;
+    scrollRef.current.scrollTop = target;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days.length, days[0] && keyOf(days[0])]);
 
   const hours = Array.from({ length: 24 }, (_, h) => h);
   const cols = days.length;
@@ -755,7 +790,7 @@ function TimeGridView({ days, eventsByDay, todayKey, timeZone, onOpenEvent }) {
           const allDay = (eventsByDay.get(key) || []).filter((ev) => ev.allDay);
           return (
             <div key={key} className="min-h-[28px] p-1 space-y-0.5 border-l border-gray-100 dark:border-gray-800">
-              {allDay.map((ev) => <EventChip key={ev.id} ev={ev} timeZone={timeZone} onOpen={onOpenEvent} />)}
+              {allDay.map((ev) => <EventChip key={ev.id} ev={ev} timeZone={timeZone} onOpen={onOpenEvent} selected={ev.id === selectedEventId} />)}
             </div>
           );
         })}
@@ -773,11 +808,24 @@ function TimeGridView({ days, eventsByDay, todayKey, timeZone, onOpenEvent }) {
           {days.map((d) => {
             const key = keyOf(d);
             const placed = layoutDay(eventsByDay.get(key) || [], timeZone, key);
+            const isToday = key === todayKey;
+            const nowTop = (nowMinutes / 60) * HOUR_PX;
             return (
               <div key={key} className="relative border-l border-gray-100 dark:border-gray-800">
                 {hours.map((h) => (
                   <div key={h} className="absolute inset-x-0 border-t border-gray-100 dark:border-gray-800/80" style={{ top: h * HOUR_PX }} />
                 ))}
+                {todayVisible && (
+                  // Google-style current-time indicator: solid red line with a dot on today,
+                  // a faint line across the other days of the same view.
+                  <div
+                    className={`absolute inset-x-0 pointer-events-none z-20 ${isToday ? 'border-t-2 border-red-500' : 'border-t border-red-300/60'}`}
+                    style={{ top: nowTop }}
+                    data-now-line={isToday ? 'today' : 'other'}
+                  >
+                    {isToday && <span className="absolute -left-[6px] -top-[6px] w-3 h-3 rounded-full bg-red-500" />}
+                  </div>
+                )}
                 {placed.map(({ ev, start, end, lane, lanes }) => {
                   const color = ev.color || DEFAULT_COLOR;
                   const top = (start / 60) * HOUR_PX;
@@ -788,7 +836,7 @@ function TimeGridView({ days, eventsByDay, todayKey, timeZone, onOpenEvent }) {
                       key={ev.id}
                       type="button"
                       onClick={() => onOpenEvent(ev.id)}
-                      className="absolute rounded px-1.5 py-0.5 text-left text-[11px] leading-tight overflow-hidden text-gray-900 hover:brightness-95 dark:text-gray-100"
+                      className={`absolute rounded px-1.5 py-0.5 text-left text-[11px] leading-tight overflow-hidden text-gray-900 hover:brightness-95 dark:text-gray-100 ${ev.id === selectedEventId ? 'ring-2 ring-primary-500 z-10' : ''}`}
                       style={{ top, height, left: `calc(${lane * width}% + 2px)`, width: `calc(${width}% - 4px)`, backgroundColor: `${color}33`, borderLeft: `3px solid ${color}` }}
                       title={`${eventLabel(ev)} · ${timeRange(ev, timeZone)}`}
                       data-event-chip
@@ -808,43 +856,7 @@ function TimeGridView({ days, eventsByDay, todayKey, timeZone, onOpenEvent }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Event list (side panel)                                             */
-/* ------------------------------------------------------------------ */
-
-function EventList({ events, timeZone, emptyText, onOpen }) {
-  if (!events.length) return <p className="text-sm text-gray-400">{emptyText}</p>;
-  return (
-    <ul className="space-y-2">
-      {events.map((ev) => (
-        <li key={ev.id}>
-          <button
-            type="button"
-            onClick={() => onOpen(ev.id)}
-            className="w-full flex gap-3 text-left rounded-lg p-2 -m-2 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-          >
-            <span className="w-1 rounded-full shrink-0" style={{ backgroundColor: ev.color || DEFAULT_COLOR }} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{eventLabel(ev)}</p>
-              <p className="text-xs text-gray-500">
-                {ev.allDay
-                  ? `All day · ${fromKey(ev.start.slice(0, 10)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                  : `${formatInTimeZone(ev.start, timeZone, 'MMM d, HH:mm')}${ev.end ? ` – ${formatInTimeZone(ev.end, timeZone, 'HH:mm')}` : ''}`}
-              </p>
-              {ev.stage && (
-                <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${STAGE_META[ev.stage].className}`}>
-                  {stageLabel(ev.stage)}
-                </span>
-              )}
-            </div>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Event detail / edit modal                                           */
+/* Event detail / edit panel (right side)                              */
 /* ------------------------------------------------------------------ */
 
 async function downloadWithAuth(url, filename) {
@@ -862,7 +874,7 @@ async function downloadWithAuth(url, filename) {
   URL.revokeObjectURL(href);
 }
 
-function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
+function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
   const startLocal = toLocalInputs(event.start, timeZone, event.allDay);
   const endLocal = toLocalInputs(event.end, timeZone, event.allDay);
 
@@ -886,13 +898,8 @@ function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [savedAt, setSavedAt] = useState(null);
   const [showImport, setShowImport] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   const updateAttendee = (i, patch) => setAttendees((prev) => prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
   const removeAttendee = (i) => setAttendees((prev) => prev.filter((_, idx) => idx !== i));
@@ -977,12 +984,12 @@ function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
         if (!same) patch[key] = next[key];
       }
       if (Object.keys(patch).length === 0) {
-        onClose();
+        setSavedAt(Date.now());
         return;
       }
       const res = await calendarAPI.updateEvent(event.id, patch);
       onSaved(res.data.event);
-      onClose();
+      setSavedAt(Date.now());
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to save');
     } finally {
@@ -1014,12 +1021,12 @@ function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
   const color = event.color || DEFAULT_COLOR;
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center p-4">
-      <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Close" />
-      <form onSubmit={save} className="relative w-full max-w-3xl card p-0 shadow-xl max-h-[92vh] flex flex-col" data-event-modal>
-        <div className="flex items-start justify-between gap-3 p-5 border-b border-gray-100 dark:border-gray-800" style={{ borderTop: `4px solid ${color}` }}>
+      <form onSubmit={save} className="card p-0 flex flex-col max-h-[calc(100vh-2rem)]" data-event-modal style={{ borderTop: `4px solid ${color}` }}>
+        <div className="flex items-start justify-between gap-3 p-5 border-b border-gray-100 dark:border-gray-800">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-gray-400">{event.calendarName || 'Google Calendar'}</p>
+            <p className="text-xs uppercase tracking-wide text-gray-400">
+              {isDefault ? 'Next up' : 'Event detail'} · {event.calendarName || 'Google Calendar'}
+            </p>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{eventLabel({ ...event, companyName, jobTitle, title })}</h3>
             <p className="text-sm text-gray-500 mt-0.5">
               {event.allDay
@@ -1034,7 +1041,6 @@ function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
             {event.htmlLink && (
               <a href={event.htmlLink} target="_blank" rel="noreferrer" className="btn btn-secondary py-1.5 px-3 text-xs">Open in Google</a>
             )}
-            <button type="button" className="text-gray-400 hover:text-gray-700 px-1" onClick={onClose} aria-label="Close">✕</button>
           </div>
         </div>
 
@@ -1043,8 +1049,8 @@ function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
             <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 dark:bg-red-900/30 dark:text-red-200">{error}</div>
           )}
 
-          <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="block sm:col-span-2">
+          <section className="grid grid-cols-1 gap-3">
+            <label className="block">
               <span className="label">Event title</span>
               <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
             </label>
@@ -1077,7 +1083,7 @@ function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
                 All day
               </label>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="label">Start date</span>
                 <input type="date" className="input" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
@@ -1179,14 +1185,13 @@ function EventModal({ event, timeZone, onClose, onSaved, onRemoved }) {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-t border-gray-100 dark:border-gray-800">
-          <button type="button" className="btn btn-danger" disabled={saving} onClick={remove}>Remove from board</button>
-          <div className="flex gap-2">
-            <button type="button" className="btn btn-secondary" disabled={saving} onClick={onClose}>Cancel</button>
+          <button type="button" className="btn btn-danger py-1.5 px-3 text-xs" disabled={saving} onClick={remove}>Remove from board</button>
+          <div className="flex items-center gap-2">
+            {savedAt && !saving && <span className="text-xs text-green-600" data-saved>Saved</span>}
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
           </div>
         </div>
       </form>
-    </div>
   );
 }
 

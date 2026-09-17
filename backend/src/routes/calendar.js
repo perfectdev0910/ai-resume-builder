@@ -291,11 +291,14 @@ async function syncEvents(userId) {
   let updated = 0;
   let removed = 0;
   const syncedAt = new Date().toISOString();
+  const seen = new Set();
+  const fetchedCalendars = new Set();
 
   for (const calendar of calendars) {
     let items;
     try {
       items = await listGoogleEvents(accessToken, calendar.id, from, to);
+      fetchedCalendars.add(calendar.id);
     } catch (err) {
       console.warn(`Skipping calendar ${calendar.id}:`, err.message);
       continue;
@@ -306,6 +309,7 @@ async function syncEvents(userId) {
       const row = existing.get(key);
 
       if (raw.status === 'cancelled') {
+        // deliberately not added to `seen`, so the sweep below also catches it
         if (row) {
           await runQueryCompat('DELETE FROM calendar_events WHERE id = ?', 'DELETE FROM calendar_events WHERE id = $1', [row.id]);
           removed++;
@@ -315,6 +319,7 @@ async function syncEvents(userId) {
 
       const parsed = parseEvent(raw, calendar, applications, conn?.google_email || '');
       if (!parsed.start_at) continue;
+      seen.add(key);
       const values = { ...parsed, attendees: JSON.stringify(parsed.attendees), all_day: parsed.all_day ? 1 : 0 };
 
       if (!row) {
@@ -338,6 +343,25 @@ async function syncEvents(userId) {
         );
         updated++;
       }
+    }
+  }
+
+  // Events deleted in Google simply stop being returned: drop rows inside the synced
+  // window that we didn't see, and rows from calendars that no longer exist. Calendars
+  // that failed to fetch are left alone so a transient error can't wipe their events.
+  const listedIds = new Set(calendars.map((c) => c.id));
+  const windowRows = await getAllCompat(
+    'SELECT id, google_calendar_id, google_event_id FROM calendar_events WHERE user_id = ? AND start_at >= ? AND start_at < ?',
+    'SELECT id, google_calendar_id, google_event_id FROM calendar_events WHERE user_id = $1 AND start_at >= $2 AND start_at < $3',
+    [userId, from.toISOString(), to.toISOString()]
+  );
+  for (const row of windowRows) {
+    const key = `${row.google_calendar_id}\n${row.google_event_id}`;
+    const calendarGone = !listedIds.has(row.google_calendar_id);
+    const eventGone = fetchedCalendars.has(row.google_calendar_id) && !seen.has(key);
+    if (calendarGone || eventGone) {
+      await runQueryCompat('DELETE FROM calendar_events WHERE id = ?', 'DELETE FROM calendar_events WHERE id = $1', [row.id]);
+      removed++;
     }
   }
 
