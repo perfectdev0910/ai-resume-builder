@@ -225,30 +225,8 @@ async function initDatabase() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_additional_info_user_id ON additional_info(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_user_tags_user_id ON user_tags(user_id)`);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS interviews (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
-        company_name VARCHAR(255) NOT NULL,
-        job_title VARCHAR(255),
-        jd_link TEXT,
-        resume_label VARCHAR(255),
-        stage VARCHAR(50) DEFAULT 'hr_screen',
-        status VARCHAR(50) DEFAULT 'upcoming',
-        interview_at TIMESTAMPTZ,
-        duration_minutes INTEGER DEFAULT 30,
-        platform VARCHAR(50) DEFAULT 'google_meet',
-        call_link TEXT,
-        interviewer TEXT,
-        notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, company_name)
-      )
-    `);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_user_id ON interviews(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status)`);
+    // Interview tracking was removed; drop the leftover table from older deployments.
+    await client.query(`DROP TABLE IF EXISTS interviews`);
 
     // Data migrations for old column names -> new ones (outside any txn; ignore missing columns)
     const optionalMigrations = [
@@ -275,137 +253,6 @@ async function initDatabase() {
   } finally {
     if (client) client.release();
   }
-}
-
-async function ensureInterviewsTable() {
-  try {
-    await query(`
-      CREATE TABLE IF NOT EXISTS interviews (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
-        company_name VARCHAR(255) NOT NULL,
-        job_title VARCHAR(255),
-        jd_link TEXT,
-        resume_label VARCHAR(255),
-        stage VARCHAR(50) DEFAULT 'hr_screen',
-        status VARCHAR(50) DEFAULT 'upcoming',
-        interview_at TIMESTAMPTZ,
-        duration_minutes INTEGER DEFAULT 30,
-        platform VARCHAR(50) DEFAULT 'google_meet',
-        call_link TEXT,
-        interviewer TEXT,
-        notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, company_name)
-      )
-    `);
-  } catch (error) {
-    await query(`
-      CREATE TABLE IF NOT EXISTS interviews (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        application_id INTEGER,
-        company_name VARCHAR(255) NOT NULL,
-        job_title VARCHAR(255),
-        jd_link TEXT,
-        resume_label VARCHAR(255),
-        stage VARCHAR(50) DEFAULT 'hr_screen',
-        status VARCHAR(50) DEFAULT 'upcoming',
-        interview_at TIMESTAMPTZ,
-        duration_minutes INTEGER DEFAULT 30,
-        platform VARCHAR(50) DEFAULT 'google_meet',
-        call_link TEXT,
-        interviewer TEXT,
-        notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.warn('Interviews table ensured without FK constraints:', error.message);
-  }
-
-  // Read existing columns, then add anything missing (works even if IF NOT EXISTS is unavailable)
-  let existing = new Set();
-  const columnTypes = new Map();
-  try {
-    const result = await query(
-      `SELECT column_name, data_type
-       FROM information_schema.columns
-       WHERE table_schema = current_schema()
-         AND table_name = 'interviews'`
-    );
-    for (const row of result.rows || []) {
-      const name = String(row.column_name).toLowerCase();
-      existing.add(name);
-      columnTypes.set(name, String(row.data_type || '').toLowerCase());
-    }
-  } catch (err) {
-    console.warn('Could not read interviews columns:', err.message);
-  }
-
-  const requiredColumns = [
-    ['application_id', 'INTEGER'],
-    ['job_title', 'VARCHAR(255)'],
-    ['jd_link', 'TEXT'],
-    ['resume_label', 'VARCHAR(255)'],
-    ['stage', "VARCHAR(50) DEFAULT 'hr_screen'"],
-    ['status', "VARCHAR(50) DEFAULT 'upcoming'"],
-    ['interview_at', 'TIMESTAMPTZ'],
-    ['duration_minutes', 'INTEGER DEFAULT 30'],
-    ['platform', "VARCHAR(50) DEFAULT 'google_meet'"],
-    ['call_link', 'TEXT'],
-    ['interviewer', 'TEXT'],
-    ['notes', 'TEXT'],
-    ['created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'],
-    ['updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP']
-  ];
-
-  for (const [name, definition] of requiredColumns) {
-    if (existing.has(name)) continue;
-    try {
-      await query(`ALTER TABLE interviews ADD COLUMN ${name} ${definition}`);
-      console.log(`✅ Added interviews.${name}`);
-      existing.add(name);
-    } catch (err) {
-      // Concurrent migrate / already added
-      if (!/already exists/i.test(err.message || '')) {
-        console.error(`Failed to add interviews.${name}:`, err.message);
-        throw err;
-      }
-      existing.add(name);
-    }
-  }
-
-  if (!existing.has('stage')) {
-    throw new Error('interviews.stage column is still missing after migration');
-  }
-
-  // Older deployments created interview_at as TIMESTAMP (no zone): Postgres drops the 'Z'
-  // from ISO input and pg reads it back in the process's local zone. Existing values were
-  // written by a UTC process, so reinterpret them as UTC while converting.
-  if (columnTypes.get('interview_at') === 'timestamp without time zone') {
-    try {
-      await query(
-        `ALTER TABLE interviews
-         ALTER COLUMN interview_at TYPE TIMESTAMPTZ
-         USING interview_at AT TIME ZONE 'UTC'`
-      );
-      console.log('✅ Migrated interviews.interview_at to TIMESTAMPTZ');
-    } catch (err) {
-      console.error('Failed to migrate interviews.interview_at to TIMESTAMPTZ:', err.message);
-      throw err;
-    }
-  }
-
-  await query(`UPDATE interviews SET stage = 'hr_screen' WHERE stage IS NULL`).catch(() => {});
-  await query(`UPDATE interviews SET status = 'upcoming' WHERE status IS NULL`).catch(() => {});
-  await query(`UPDATE interviews SET duration_minutes = 30 WHERE duration_minutes IS NULL`).catch(() => {});
-  await query(`UPDATE interviews SET platform = 'google_meet' WHERE platform IS NULL`).catch(() => {});
-
-  await query(`CREATE INDEX IF NOT EXISTS idx_interviews_user_id ON interviews(user_id)`).catch(() => {});
-  await query(`CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status)`).catch(() => {});
 }
 
 // Admin bootstrap via env removed — promote a user to admin in the DB or app when needed
@@ -463,6 +310,5 @@ module.exports = {
   initDatabase,
   initAdminAccount,
   migrateExistingUsers,
-  cleanupOldApplications,
-  ensureInterviewsTable
+  cleanupOldApplications
 };

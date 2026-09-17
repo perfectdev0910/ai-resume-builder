@@ -11,7 +11,6 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const applicationRoutes = require('./routes/applications');
 const cvRoutes = require('./routes/cv');
-const interviewRoutes = require('./routes/interviews');
 const { initDatabase, initAdminAccount, migrateExistingUsers } = require('./models/database');
 
 const app = express();
@@ -52,7 +51,6 @@ app.use('/api/users', userRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/cv/generate', generateLimiter);
 app.use('/api/cv', cvRoutes);
-app.use('/api/interviews', interviewRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -69,12 +67,8 @@ app.use((err, req, res, next) => {
 });
 
 initDatabase().then(async () => {
-  const { ensureInterviewsTable } = require('./models/database');
   await migrateExistingUsers();
   await initAdminAccount();
-  if (typeof ensureInterviewsTable === 'function') {
-    await ensureInterviewsTable();
-  }
 
   app.listen(PORT, () => {
     console.log(`🚀 AI Resume Builder API running on port ${PORT}`);

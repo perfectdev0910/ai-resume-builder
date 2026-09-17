@@ -23,7 +23,6 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const applicationRoutes = require('./routes/applications');
 const cvRoutes = require('./routes/cv.production');
-const interviewRoutes = require('./routes/interviews');
 const { cleanupOldFiles } = require('./jobs/cleanup');
 
 const app = express();
@@ -81,7 +80,6 @@ app.use('/api/users', userRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/cv/generate', generateLimiter);
 app.use('/api/cv', cvRoutes);
-app.use('/api/interviews', interviewRoutes);
 
 app.use((err, req, res, next) => {
   console.error('Error:', err.message);
@@ -103,9 +101,6 @@ async function startServer() {
     require('./config/env').getJwtSecret();
 
     await db.initDatabase();
-    if (typeof db.ensureInterviewsTable === 'function') {
-      await db.ensureInterviewsTable();
-    }
     await db.migrateExistingUsers();
     await db.initAdminAccount();
 

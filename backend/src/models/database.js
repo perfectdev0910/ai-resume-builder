@@ -163,30 +163,8 @@ function initDatabase() {
       database.run(`ALTER TABLE applications ADD COLUMN cover_letter_doc_url TEXT`, (err) => {});
       database.run(`ALTER TABLE applications ADD COLUMN cover_letter_pdf_url TEXT`, (err) => {});
 
-      database.run(`
-        CREATE TABLE IF NOT EXISTS interviews (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          application_id INTEGER,
-          company_name TEXT NOT NULL,
-          job_title TEXT,
-          jd_link TEXT,
-          resume_label TEXT,
-          stage TEXT DEFAULT 'hr_screen',
-          status TEXT DEFAULT 'upcoming',
-          interview_at TEXT,
-          duration_minutes INTEGER DEFAULT 30,
-          platform TEXT DEFAULT 'google_meet',
-          call_link TEXT,
-          interviewer TEXT,
-          notes TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-          FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL,
-          UNIQUE(user_id, company_name)
-        )
-      `, (err) => {
+      // Interview tracking was removed; drop the leftover table from older installs.
+      database.run(`DROP TABLE IF EXISTS interviews`, (err) => {
         if (err) reject(err);
         else resolve();
       });
@@ -226,64 +204,6 @@ async function initAdminAccount() {
   return;
 }
 
-function ensureInterviewsTable() {
-  return new Promise((resolve, reject) => {
-    const database = getDb();
-    database.run(
-      `CREATE TABLE IF NOT EXISTS interviews (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        application_id INTEGER,
-        company_name TEXT NOT NULL,
-        job_title TEXT,
-        jd_link TEXT,
-        resume_label TEXT,
-        stage TEXT DEFAULT 'hr_screen',
-        status TEXT DEFAULT 'upcoming',
-        interview_at TEXT,
-        duration_minutes INTEGER DEFAULT 30,
-        platform TEXT DEFAULT 'google_meet',
-        call_link TEXT,
-        interviewer TEXT,
-        notes TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL,
-        UNIQUE(user_id, company_name)
-      )`,
-      (createErr) => {
-        if (createErr) return reject(createErr);
-
-        const columns = [
-          'application_id INTEGER',
-          'job_title TEXT',
-          'jd_link TEXT',
-          'resume_label TEXT',
-          "stage TEXT DEFAULT 'hr_screen'",
-          "status TEXT DEFAULT 'upcoming'",
-          'interview_at TEXT',
-          'duration_minutes INTEGER DEFAULT 30',
-          "platform TEXT DEFAULT 'google_meet'",
-          'call_link TEXT',
-          'interviewer TEXT',
-          'notes TEXT',
-          'created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
-          'updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'
-        ];
-
-        let i = 0;
-        const next = () => {
-          if (i >= columns.length) return resolve();
-          const col = columns[i++];
-          database.run(`ALTER TABLE interviews ADD COLUMN ${col}`, () => next());
-        };
-        next();
-      }
-    );
-  });
-}
-
 // Update existing users to have 'active' status if they don't have a status
 async function migrateExistingUsers() {
   try {
@@ -296,4 +216,4 @@ async function migrateExistingUsers() {
   }
 }
 
-module.exports = { getDb, initDatabase, runQuery, getOne, getAll, initAdminAccount, migrateExistingUsers, ensureInterviewsTable };
+module.exports = { getDb, initDatabase, runQuery, getOne, getAll, initAdminAccount, migrateExistingUsers };
