@@ -8,7 +8,7 @@ const db = isPostgres
 
 const { authMiddleware } = require('../middleware/auth');
 const { getJwtSecret, getFrontendOrigins } = require('../config/env');
-const { parseEvent, STAGES } = require('../utils/eventParser');
+const { parseEvent, normalizeStage, STAGES } = require('../utils/eventParser');
 
 const router = express.Router();
 
@@ -183,7 +183,7 @@ function formatEvent(row) {
     title: row.title || '(No title)',
     companyName: row.company_name || '',
     jobTitle: row.job_title || '',
-    stage: row.stage || null,
+    stage: normalizeStage(row.stage),
     meetingLink: row.meeting_link || '',
     start: iso(row.start_at),
     end: iso(row.end_at),
@@ -653,8 +653,8 @@ router.put('/events/:id', authMiddleware, async (req, res) => {
       let value = req.body[key];
 
       if (column === 'stage') {
-        if (value && !STAGES.includes(value)) return res.status(400).json({ error: 'Invalid stage' });
-        value = value || null;
+        value = value ? String(value) : 'not_sure';
+        if (!STAGES.includes(value)) return res.status(400).json({ error: 'Invalid stage' });
       } else if (column === 'start_at' || column === 'end_at') {
         if (value) {
           const d = new Date(value);

@@ -5,15 +5,27 @@
 
 const { prettyCompanyName } = require('./companyName');
 
-const STAGES = ['hr_screen', 'assessment', 'technical', 'background_check', 'onsite_final', 'offer'];
+const STAGES = ['not_sure', 'hr_screen', 'technical_screen', 'final', 'offer'];
 
-// Ordered: the first matching rule wins, so more specific stages come first.
+// Older rows used a finer-grained set; fold them into the current one.
+const LEGACY_STAGES = {
+  assessment: 'technical_screen',
+  technical: 'technical_screen',
+  background_check: 'final',
+  onsite_final: 'final'
+};
+
+function normalizeStage(value) {
+  if (!value) return 'not_sure';
+  if (STAGES.includes(value)) return value;
+  return LEGACY_STAGES[value] || 'not_sure';
+}
+
+// Ordered: the first matching rule wins, so later-stage keywords come first.
 const STAGE_RULES = [
   ['offer', /\boffer\b/i],
-  ['background_check', /\b(background|reference)s?\s*check|\breference call\b/i],
-  ['onsite_final', /\b(on-?site|final|panel|loop|hiring manager|culture|values|team fit|leadership|bar raiser|executive)\b/i],
-  ['assessment', /\b(assessment|take-?home|coding challenge|assignment|homework|test|quiz|hackerrank|codility|codesignal)\b/i],
-  ['technical', /\b(technical|tech|coding|system design|architecture|pair(ing)? programming|live coding|whiteboard|algorithm|case study)\b/i],
+  ['final', /\b(on-?site|final|panel|loop|hiring manager|culture|values|team fit|leadership|bar raiser|executive|(background|reference)s?\s*check|reference call)\b/i],
+  ['technical_screen', /\b(technical|tech|coding|system design|architecture|pair(ing)? programming|live coding|whiteboard|algorithm|case study|assessment|take-?home|coding challenge|assignment|homework|hackerrank|codility|codesignal)\b/i],
   ['hr_screen', /\b(hr|recruiter|recruiting|talent|phone screen|screen(ing)?|intro(duction|ductory)?|initial|first call|discovery|kick-?off|chat)\b/i]
 ];
 
@@ -85,7 +97,7 @@ function detectStage(text) {
   for (const [stage, re] of STAGE_RULES) {
     if (re.test(text)) return stage;
   }
-  return null;
+  return 'not_sure';
 }
 
 function detectMeetingLink(event, description) {
@@ -255,4 +267,4 @@ function parseEvent(event, calendar, applications = [], ownerEmail = '') {
   };
 }
 
-module.exports = { parseEvent, stripHtml, detectStage, STAGES };
+module.exports = { parseEvent, stripHtml, detectStage, normalizeStage, STAGES };

@@ -16,12 +16,11 @@ const VIEWS = [
 ];
 
 const STAGE_META = {
-  hr_screen: { label: 'HR Screen', className: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' },
-  assessment: { label: 'Assessment', className: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' },
-  technical: { label: 'Technical', className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' },
-  background_check: { label: 'Background Check', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200' },
-  onsite_final: { label: 'Onsite / Final', className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200' },
-  offer: { label: 'Offer', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' }
+  not_sure: { label: 'Not sure', className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300', dot: '#9ca3af' },
+  hr_screen: { label: 'HR Screen', className: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200', dot: '#0ea5e9' },
+  technical_screen: { label: 'Technical Screen', className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200', dot: '#f59e0b' },
+  final: { label: 'Final', className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200', dot: '#6366f1' },
+  offer: { label: 'Offer', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200', dot: '#10b981' }
 };
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -136,7 +135,11 @@ function relativeTime(value) {
 }
 
 function stageLabel(stage) {
-  return STAGE_META[stage]?.label || '';
+  return STAGE_META[stage]?.label || STAGE_META.not_sure.label;
+}
+
+function stageClass(stage) {
+  return (STAGE_META[stage] || STAGE_META.not_sure).className;
 }
 
 function eventLabel(ev) {
@@ -690,7 +693,7 @@ function EventChip({ ev, timeZone, onOpen, selected = false }) {
       onClick={(e) => { e.stopPropagation(); onOpen(ev.id); }}
       className={`block w-full truncate rounded px-1 py-0.5 text-left text-[11px] leading-tight text-gray-800 hover:brightness-95 dark:text-gray-100 ${selected ? 'ring-2 ring-primary-500' : ''}`}
       style={{ backgroundColor: `${color}33`, borderLeft: `3px solid ${color}` }}
-      title={`${eventLabel(ev)}${ev.stage ? ` (${stageLabel(ev.stage)})` : ''}`}
+      title={`${eventLabel(ev)}${ev.stage && ev.stage !== 'not_sure' ? ` (${stageLabel(ev.stage)})` : ''}`}
       data-event-chip
     >
       {!ev.allDay && <span className="text-gray-500 dark:text-gray-300 mr-1">{formatInTimeZone(ev.start, timeZone, 'HH:mm')}</span>}
@@ -842,7 +845,7 @@ function TimeGridView({ days, eventsByDay, todayKey, selectedEventId, timeZone, 
                       data-event-chip
                     >
                       <div className="font-medium truncate">{eventLabel(ev)}</div>
-                      <div className="text-gray-600 dark:text-gray-300 truncate">{timeRange(ev, timeZone)}{ev.stage ? ` · ${stageLabel(ev.stage)}` : ''}</div>
+                      <div className="text-gray-600 dark:text-gray-300 truncate">{timeRange(ev, timeZone)}{ev.stage && ev.stage !== 'not_sure' ? ` · ${stageLabel(ev.stage)}` : ''}</div>
                     </button>
                   );
                 })}
@@ -875,20 +878,20 @@ async function downloadWithAuth(url, filename) {
 }
 
 function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
+  const [editing, setEditing] = useState(false);
   const startLocal = toLocalInputs(event.start, timeZone, event.allDay);
   const endLocal = toLocalInputs(event.end, timeZone, event.allDay);
 
   const [title, setTitle] = useState(event.title || '');
   const [companyName, setCompanyName] = useState(event.companyName || '');
   const [jobTitle, setJobTitle] = useState(event.jobTitle || '');
-  const [stage, setStage] = useState(event.stage || '');
+  const [stage, setStage] = useState(event.stage || 'not_sure');
   const [allDay, setAllDay] = useState(Boolean(event.allDay));
   const [startDate, setStartDate] = useState(startLocal.date);
   const [startTime, setStartTime] = useState(startLocal.time);
   const [endDate, setEndDate] = useState(endLocal.date);
   const [endTime, setEndTime] = useState(endLocal.time);
   const [meetingLink, setMeetingLink] = useState(event.meetingLink || '');
-  const [location, setLocation] = useState(event.location || '');
   const [attendees, setAttendees] = useState(event.attendees || []);
   const [description, setDescription] = useState(event.description || '');
   const [jdLink, setJdLink] = useState(event.jdLink || '');
@@ -944,12 +947,11 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
         title,
         companyName,
         jobTitle,
-        stage: stage || null,
+        stage: stage || 'not_sure',
         allDay,
         start,
         end,
         meetingLink,
-        location,
         attendees,
         description,
         jdLink,
@@ -961,12 +963,11 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
         title: event.title || '',
         companyName: event.companyName || '',
         jobTitle: event.jobTitle || '',
-        stage: event.stage || null,
+        stage: event.stage || 'not_sure',
         allDay: Boolean(event.allDay),
         start: event.start,
         end: event.end,
         meetingLink: event.meetingLink || '',
-        location: event.location || '',
         attendees: event.attendees || [],
         description: event.description || '',
         jdLink: event.jdLink || '',
@@ -984,12 +985,13 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
         if (!same) patch[key] = next[key];
       }
       if (Object.keys(patch).length === 0) {
-        setSavedAt(Date.now());
+        setEditing(false);
         return;
       }
       const res = await calendarAPI.updateEvent(event.id, patch);
       onSaved(res.data.event);
       setSavedAt(Date.now());
+      setEditing(false);
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to save');
     } finally {
@@ -1027,7 +1029,7 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
             <p className="text-xs uppercase tracking-wide text-gray-400">
               {isDefault ? 'Next up' : 'Event detail'} · {event.calendarName || 'Google Calendar'}
             </p>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{eventLabel({ ...event, companyName, jobTitle, title })}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{eventLabel(editing ? { ...event, companyName, jobTitle, title } : event)}</h3>
             <p className="text-sm text-gray-500 mt-0.5">
               {event.allDay
                 ? `All day · ${fromKey(event.start.slice(0, 10)).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
@@ -1035,8 +1037,8 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {meetingLink && (
-              <a href={meetingLink} target="_blank" rel="noreferrer" className="btn btn-primary py-1.5 px-3 text-xs">Join call</a>
+            {event.meetingLink && (
+              <a href={event.meetingLink} target="_blank" rel="noreferrer" className="btn btn-primary py-1.5 px-3 text-xs">Join call</a>
             )}
             {event.htmlLink && (
               <a href={event.htmlLink} target="_blank" rel="noreferrer" className="btn btn-secondary py-1.5 px-3 text-xs">Open in Google</a>
@@ -1044,6 +1046,9 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
           </div>
         </div>
 
+        {!editing ? (
+          <EventSummary event={event} timeZone={timeZone} error={error} onDownload={download} />
+        ) : (
         <div className="overflow-y-auto p-5 space-y-5">
           {error && (
             <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 dark:bg-red-900/30 dark:text-red-200">{error}</div>
@@ -1065,7 +1070,6 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
             <label className="block">
               <span className="label">Stage</span>
               <select className="input" value={stage} onChange={(e) => setStage(e.target.value)}>
-                <option value="">— Not an interview / unknown —</option>
                 {Object.entries(STAGE_META).map(([id, meta]) => <option key={id} value={id}>{meta.label}</option>)}
               </select>
             </label>
@@ -1106,10 +1110,6 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
               )}
             </div>
             <p className="text-xs text-gray-400">Times are in {timeZone}.</p>
-            <label className="block">
-              <span className="label">Location</span>
-              <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} />
-            </label>
           </section>
 
           <section className="space-y-2">
@@ -1179,19 +1179,193 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
           </section>
 
           <section className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Your notes</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">My note</p>
             <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Prep notes, questions to ask, feedback…" />
           </section>
         </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-t border-gray-100 dark:border-gray-800">
           <button type="button" className="btn btn-danger py-1.5 px-3 text-xs" disabled={saving} onClick={remove}>Remove from board</button>
           <div className="flex items-center gap-2">
-            {savedAt && !saving && <span className="text-xs text-green-600" data-saved>Saved</span>}
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+            {savedAt && !saving && !editing && <span className="text-xs text-green-600" data-saved>Saved</span>}
+            {editing ? (
+              <>
+                <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => { setEditing(false); setError(''); }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+              </>
+            ) : (
+              <button type="button" className="btn btn-primary" onClick={() => setEditing(true)} data-edit-button>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Edit
+              </button>
+            )}
           </div>
         </div>
       </form>
+  );
+}
+
+/* Read-only summary shown in the side panel until the user clicks Edit. */
+const ATTENDEE_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316'];
+
+function attendeeColor(seed) {
+  let h = 0;
+  for (const ch of String(seed || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return ATTENDEE_COLORS[h % ATTENDEE_COLORS.length];
+}
+
+function AttendeeStatusIcon({ status }) {
+  if (status === 'accepted') {
+    return (
+      <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-green-500 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center" title="Accepted">
+        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+      </span>
+    );
+  }
+  if (status === 'declined') {
+    return (
+      <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center" title="Declined">
+        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+      </span>
+    );
+  }
+  if (status === 'tentative') {
+    return (
+      <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-gray-400 ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-[9px] font-bold text-white" title="Maybe">?</span>
+    );
+  }
+  return null;
+}
+
+function EventSummary({ event, timeZone, error, onDownload }) {
+  const attendees = event.attendees || [];
+  const accepted = attendees.filter((a) => a.status === 'accepted').length;
+  const application = event.application;
+  const meta = STAGE_META[event.stage] || STAGE_META.not_sure;
+
+  return (
+    <div className="overflow-y-auto p-5 space-y-5" data-event-summary>
+      {error && (
+        <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 dark:bg-red-900/30 dark:text-red-200">{error}</div>
+      )}
+
+      {/* Stage + event title */}
+      <section className="flex items-start gap-3">
+        <span className="mt-1 w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: meta.dot }} />
+        <div className="min-w-0">
+          <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${meta.className}`}>
+            {meta.label}
+          </span>
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1.5 break-words">{event.title}</p>
+          {event.companyName && (
+            <p className="text-xs text-gray-500 mt-0.5">{event.companyName}{event.jobTitle ? ` · ${event.jobTitle}` : ''}</p>
+          )}
+        </div>
+      </section>
+
+      {/* Invited people (Google Calendar style) */}
+      <section className="space-y-2">
+        <div className="flex items-center gap-2 text-gray-500">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          <span className="text-xs font-semibold uppercase tracking-wide">
+            {attendees.length ? `${attendees.length} guest${attendees.length === 1 ? '' : 's'}` : 'Guests'}
+          </span>
+          {attendees.length > 0 && accepted > 0 && <span className="text-xs text-gray-400">· {accepted} yes</span>}
+        </div>
+        {attendees.length === 0 ? (
+          <p className="text-sm text-gray-400 pl-6">No guests.</p>
+        ) : (
+          <ul className="space-y-1.5 pl-1">
+            {attendees.map((a, i) => {
+              const label = a.name || a.email || 'Guest';
+              const initial = (a.name || a.email || '?').trim().charAt(0).toUpperCase();
+              return (
+                <li key={`${a.email}-${i}`} className="flex items-center gap-3">
+                  <span className="relative w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold text-white shrink-0" style={{ backgroundColor: attendeeColor(a.email || a.name) }}>
+                    {initial}
+                    <AttendeeStatusIcon status={a.status} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                      {label}
+                      {a.organizer && <span className="text-xs text-gray-400 ml-1">· Organizer</span>}
+                      {a.self && !a.organizer && <span className="text-xs text-gray-400 ml-1">· You</span>}
+                    </p>
+                    {a.name && a.email && <p className="text-xs text-gray-500 truncate">{a.email}</p>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* JD / Resume */}
+      <section className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Job description & resume</p>
+        <div className="flex flex-wrap gap-2">
+          {event.jdLink ? (
+            <a href={event.jdLink} target="_blank" rel="noreferrer" className="btn btn-secondary py-1.5 px-3 text-xs inline-flex items-center gap-1.5">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+              JD link
+            </a>
+          ) : (
+            <span className="text-xs text-gray-400 self-center">No JD link</span>
+          )}
+          {application ? (
+            <>
+              <button type="button" className="btn btn-secondary py-1.5 px-3 text-xs inline-flex items-center gap-1.5" onClick={() => onDownload('pdf')}>
+                <DownloadIcon /> Resume PDF
+              </button>
+              <button type="button" className="btn btn-secondary py-1.5 px-3 text-xs inline-flex items-center gap-1.5" onClick={() => onDownload('docx')}>
+                <DownloadIcon /> Resume DOCX
+              </button>
+            </>
+          ) : event.resumeLink ? (
+            <a href={event.resumeLink} target="_blank" rel="noreferrer" className="btn btn-secondary py-1.5 px-3 text-xs inline-flex items-center gap-1.5">
+              <DownloadIcon /> Resume
+            </a>
+          ) : (
+            <span className="text-xs text-gray-400 self-center">No resume linked</span>
+          )}
+        </div>
+        {application && (
+          <p className="text-xs text-gray-400">
+            Resume from application: {application.companyName}{application.jobTitle ? ` — ${application.jobTitle}` : ''}
+            {application.appliedAt ? ` (${formatInTimeZone(application.appliedAt, timeZone, 'MMM d, yyyy')})` : ''}
+          </p>
+        )}
+      </section>
+
+      {/* Description */}
+      <section className="space-y-1.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Description</p>
+        {event.description ? (
+          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">{event.description}</p>
+        ) : (
+          <p className="text-sm text-gray-400">No description.</p>
+        )}
+      </section>
+
+      {/* My note */}
+      <section className="space-y-1.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">My note</p>
+        {event.notes ? (
+          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words rounded-lg bg-amber-50/70 px-3 py-2 dark:bg-amber-900/20">{event.notes}</p>
+        ) : (
+          <p className="text-sm text-gray-400">No note yet — click Edit to add one.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
   );
 }
 

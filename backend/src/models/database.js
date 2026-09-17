@@ -218,6 +218,10 @@ function initDatabase() {
           UNIQUE(user_id, google_calendar_id, google_event_id)
         )
       `);
+      // Stage set was simplified; fold old values into the new ones
+      database.run(`UPDATE calendar_events SET stage = 'technical_screen' WHERE stage IN ('technical', 'assessment')`, () => {});
+      database.run(`UPDATE calendar_events SET stage = 'final' WHERE stage IN ('onsite_final', 'background_check')`, () => {});
+      database.run(`UPDATE calendar_events SET stage = 'not_sure' WHERE stage IS NULL OR stage = ''`, () => {});
       database.run(`CREATE INDEX IF NOT EXISTS idx_calendar_events_user_start ON calendar_events(user_id, start_at)`, (err) => {
         if (err) reject(err);
         else resolve();
