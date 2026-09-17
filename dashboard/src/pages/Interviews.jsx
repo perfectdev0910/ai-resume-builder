@@ -920,7 +920,8 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
     });
     if (!companyName.trim()) setCompanyName(app.companyName || '');
     if (!jobTitle.trim()) setJobTitle(app.jobTitle || '');
-    if (!jdLink.trim() && app.jdLink) setJdLink(app.jdLink);
+    // Importing an application always brings its JD link into the field.
+    if (app.jdLink) setJdLink(app.jdLink);
     setShowImport(false);
   };
 
