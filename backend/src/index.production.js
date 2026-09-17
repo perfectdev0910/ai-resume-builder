@@ -22,6 +22,7 @@ const db = process.env.DATABASE_URL
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const applicationRoutes = require('./routes/applications');
+const calendarRoutes = require('./routes/calendar');
 const cvRoutes = require('./routes/cv.production');
 const { cleanupOldFiles } = require('./jobs/cleanup');
 
@@ -78,6 +79,7 @@ app.post('/api/cleanup', async (req, res) => {
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/applications', applicationRoutes);
+app.use('/api/calendar', calendarRoutes);
 app.use('/api/cv/generate', generateLimiter);
 app.use('/api/cv', cvRoutes);
 

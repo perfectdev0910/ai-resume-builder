@@ -228,6 +228,20 @@ async function initDatabase() {
     // Interview tracking was removed; drop the leftover table from older deployments.
     await client.query(`DROP TABLE IF EXISTS interviews`);
 
+    // Google Calendar OAuth tokens (one connection per user)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS google_calendar_tokens (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        google_email VARCHAR(255),
+        access_token TEXT NOT NULL,
+        refresh_token TEXT,
+        scope TEXT,
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Data migrations for old column names -> new ones (outside any txn; ignore missing columns)
     const optionalMigrations = [
       `UPDATE employment_history SET company = company_name WHERE company IS NULL AND company_name IS NOT NULL`,

@@ -10,6 +10,7 @@ const { mountProtectedUploads } = require('./middleware/protectedUploads');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const applicationRoutes = require('./routes/applications');
+const calendarRoutes = require('./routes/calendar');
 const cvRoutes = require('./routes/cv');
 const { initDatabase, initAdminAccount, migrateExistingUsers } = require('./models/database');
 
@@ -49,6 +50,7 @@ mountProtectedUploads(app);
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/applications', applicationRoutes);
+app.use('/api/calendar', calendarRoutes);
 app.use('/api/cv/generate', generateLimiter);
 app.use('/api/cv', cvRoutes);
 

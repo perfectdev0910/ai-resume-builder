@@ -164,7 +164,22 @@ function initDatabase() {
       database.run(`ALTER TABLE applications ADD COLUMN cover_letter_pdf_url TEXT`, (err) => {});
 
       // Interview tracking was removed; drop the leftover table from older installs.
-      database.run(`DROP TABLE IF EXISTS interviews`, (err) => {
+      database.run(`DROP TABLE IF EXISTS interviews`);
+
+      // Google Calendar OAuth tokens (one connection per user)
+      database.run(`
+        CREATE TABLE IF NOT EXISTS google_calendar_tokens (
+          user_id INTEGER PRIMARY KEY,
+          google_email TEXT,
+          access_token TEXT NOT NULL,
+          refresh_token TEXT,
+          scope TEXT,
+          expires_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `, (err) => {
         if (err) reject(err);
         else resolve();
       });

@@ -124,6 +124,14 @@ export const cvAPI = {
   }
 };
 
+// Calendar API (Google Calendar integration for the Interviews page)
+export const calendarAPI = {
+  getGoogleStatus: () => api.get('/calendar/google/status'),
+  getGoogleAuthUrl: () => api.get('/calendar/google/auth-url'),
+  getGoogleEvents: (from, to) => api.get('/calendar/google/events', { params: { from, to } }),
+  disconnectGoogle: () => api.delete('/calendar/google')
+};
+
 // Applications API
 export const applicationsAPI = {
   getAll: (params = {}) => api.get('/applications', { params }),
