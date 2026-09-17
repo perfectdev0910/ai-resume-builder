@@ -23,9 +23,26 @@ const STAGE_META = {
   offer: { label: 'Offer', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200', dot: '#10b981' }
 };
 
+// Event state: upcoming until it ends, then waiting for feedback; the user can record passed/failed.
+const STATUS_META = {
+  upcoming: { label: 'Upcoming', color: '#3b82f6', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' },
+  waiting_feedback: { label: 'Waiting feedback', color: '#f59e0b', className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' },
+  passed: { label: 'Passed', color: '#10b981', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' },
+  failed: { label: 'Failed', color: '#ef4444', className: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' }
+};
+
+function eventStatus(ev, now = Date.now()) {
+  if (ev.outcome === 'passed' || ev.outcome === 'failed') return ev.outcome;
+  const endsAt = ev.end || ev.start;
+  return endsAt && new Date(endsAt).getTime() < now ? 'waiting_feedback' : 'upcoming';
+}
+
+function statusMeta(ev, now) {
+  return STATUS_META[eventStatus(ev, now)];
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOUR_PX = 48;
-const DEFAULT_COLOR = '#6366f1';
 
 // The OAuth popup's final page is served by the backend, so its messages come from the API origin.
 const API_ORIGIN = new URL(API_BASE_URL, window.location.origin).origin;
@@ -594,6 +611,15 @@ function CalendarTab() {
             </div>
           )}
 
+          <div className="flex flex-wrap items-center gap-4 px-1 text-xs text-gray-500" data-legend>
+            {Object.entries(STATUS_META).map(([id, meta]) => (
+              <span key={id} className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: meta.color }} />
+                {meta.label}
+              </span>
+            ))}
+          </div>
+
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.9fr)] gap-4 items-start">
             {view === 'month' ? (
               <MonthView
@@ -686,7 +712,7 @@ function MonthView({ grid, eventsByDay, todayKey, selectedEventId, timeZone, onO
 }
 
 function EventChip({ ev, timeZone, onOpen, selected = false }) {
-  const color = ev.color || DEFAULT_COLOR;
+  const color = statusMeta(ev).color;
   return (
     <button
       type="button"
@@ -830,7 +856,7 @@ function TimeGridView({ days, eventsByDay, todayKey, selectedEventId, timeZone, 
                   </div>
                 )}
                 {placed.map(({ ev, start, end, lane, lanes }) => {
-                  const color = ev.color || DEFAULT_COLOR;
+                  const color = statusMeta(ev).color;
                   const top = (start / 60) * HOUR_PX;
                   const height = Math.max(22, ((end - start) / 60) * HOUR_PX - 2);
                   const width = 100 / lanes;
@@ -898,6 +924,7 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
   const [resumeLink, setResumeLink] = useState(event.resumeLink || '');
   const [application, setApplication] = useState(event.application || null);
   const [notes, setNotes] = useState(event.notes || '');
+  const [outcome, setOutcome] = useState(event.outcome || '');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -958,7 +985,8 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
         jdLink,
         resumeLink,
         applicationId: application?.id || null,
-        notes
+        notes,
+        outcome: outcome || null
       };
       const original = {
         title: event.title || '',
@@ -974,7 +1002,8 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
         jdLink: event.jdLink || '',
         resumeLink: event.resumeLink || '',
         applicationId: event.applicationId || null,
-        notes: event.notes || ''
+        notes: event.notes || '',
+        outcome: event.outcome || null
       };
       const patch = {};
       for (const key of Object.keys(next)) {
@@ -1021,7 +1050,7 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
     }
   };
 
-  const color = event.color || DEFAULT_COLOR;
+  const color = statusMeta(event).color;
 
   return (
       <form onSubmit={save} className="card p-0 flex flex-col max-h-[calc(100vh-2rem)]" data-event-modal style={{ borderTop: `4px solid ${color}` }}>
@@ -1073,6 +1102,15 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
               <select className="input" value={stage} onChange={(e) => setStage(e.target.value)}>
                 {Object.entries(STAGE_META).map(([id, meta]) => <option key={id} value={id}>{meta.label}</option>)}
               </select>
+            </label>
+            <label className="block">
+              <span className="label">Result</span>
+              <select className="input" value={outcome} onChange={(e) => setOutcome(e.target.value)} data-outcome-select>
+                <option value="">Automatic ({STATUS_META[eventStatus({ ...event, outcome: null })].label})</option>
+                <option value="passed">Passed</option>
+                <option value="failed">Failed</option>
+              </select>
+              <span className="text-xs text-gray-400">Upcoming until the event ends, then waiting for feedback — set Passed or Failed once you know.</span>
             </label>
             <label className="block">
               <span className="label">Meeting link</span>
@@ -1246,6 +1284,19 @@ function EventSummary({ event, timeZone, error, onDownload }) {
   const accepted = attendees.filter((a) => a.status === 'accepted').length;
   const application = event.application;
   const meta = STAGE_META[event.stage] || STAGE_META.not_sure;
+  const status = statusMeta(event);
+
+  // Earlier interview steps with the same company.
+  const [history, setHistory] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setHistory(null);
+    if (!event.companyName) { setHistory({ previous: [], next: [] }); return undefined; }
+    calendarAPI.getEventHistory(event.id)
+      .then((res) => { if (!cancelled) setHistory(res.data || { previous: [], next: [] }); })
+      .catch(() => { if (!cancelled) setHistory({ previous: [], next: [] }); });
+    return () => { cancelled = true; };
+  }, [event.id, event.companyName, event.updatedAt]);
 
   return (
     <div className="overflow-y-auto p-5 space-y-5" data-event-summary>
@@ -1253,19 +1304,52 @@ function EventSummary({ event, timeZone, error, onDownload }) {
         <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 dark:bg-red-900/30 dark:text-red-200">{error}</div>
       )}
 
-      {/* Stage + event title */}
+      {/* Status + stage + event title */}
       <section className="flex items-start gap-3">
-        <span className="mt-1 w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: meta.dot }} />
+        <span className="mt-1 w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: status.color }} />
         <div className="min-w-0">
-          <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${meta.className}`}>
-            {meta.label}
-          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${status.className}`} data-status-badge>
+              {status.label}
+            </span>
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${meta.className}`} data-stage-badge>
+              {meta.label}
+            </span>
+          </div>
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1.5 break-words">{event.title}</p>
           {event.companyName && (
             <p className="text-xs text-gray-500 mt-0.5">{event.companyName}{event.jobTitle ? ` · ${event.jobTitle}` : ''}</p>
           )}
         </div>
       </section>
+
+      {/* Previous steps with this company */}
+      {history && history.previous.length > 0 && (
+        <section className="space-y-2" data-previous-steps>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Previous steps · {event.companyName}</p>
+          <ol className="relative border-l border-gray-200 dark:border-gray-700 ml-1.5 space-y-2">
+            {history.previous.map((step) => {
+              const st = statusMeta(step);
+              const stg = STAGE_META[step.stage] || STAGE_META.not_sure;
+              return (
+                <li key={step.id} className="pl-4">
+                  <span className="absolute -left-[5px] mt-1.5 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-gray-900" style={{ backgroundColor: st.color }} />
+                  <p className="text-sm text-gray-900 dark:text-gray-100">
+                    {stg.label}
+                    <span className={`ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${st.className}`}>{st.label}</span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {step.allDay
+                      ? fromKey(step.start.slice(0, 10)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      : formatInTimeZone(step.start, timeZone, 'MMM d, HH:mm')}
+                    {step.title && step.title !== step.companyName ? ` · ${step.title}` : ''}
+                  </p>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
 
       {/* Invited people (Google Calendar style) */}
       <section className="space-y-2">

@@ -132,6 +132,7 @@ export const calendarAPI = {
   disconnectGoogle: () => api.delete('/calendar/google'),
   getEvents: (from, to) => api.get('/calendar/events', { params: { from, to } }),
   getEvent: (id) => api.get(`/calendar/events/${id}`),
+  getEventHistory: (id) => api.get(`/calendar/events/${id}/history`),
   updateEvent: (id, data) => api.put(`/calendar/events/${id}`, data),
   removeEvent: (id) => api.delete(`/calendar/events/${id}`)
 };

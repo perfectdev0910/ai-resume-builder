@@ -167,6 +167,17 @@ async function googleGet(accessToken, url) {
   return data;
 }
 
+const OUTCOMES = ['passed', 'failed'];
+
+// Upcoming until the event has ended, then waiting for feedback — unless the user
+// recorded a result (passed / failed), which always wins.
+function computeStatus(row) {
+  if (OUTCOMES.includes(row.outcome)) return row.outcome;
+  const endsAt = row.end_at || row.start_at;
+  if (endsAt && new Date(endsAt).getTime() < Date.now()) return 'waiting_feedback';
+  return 'upcoming';
+}
+
 function formatEvent(row) {
   if (!row) return null;
   let attendees = [];
@@ -207,6 +218,8 @@ function formatEvent(row) {
     jdLink: row.jd_link || '',
     resumeLink: row.resume_link || '',
     notes: row.notes || '',
+    outcome: OUTCOMES.includes(row.outcome) ? row.outcome : null,
+    status: computeStatus(row),
     editedFields,
     syncedAt: iso(row.synced_at),
     updatedAt: iso(row.updated_at)
@@ -609,6 +622,31 @@ router.get('/events', authMiddleware, async (req, res) => {
   }
 });
 
+// Earlier events for the same company — the interview steps that led up to this one.
+router.get('/events/:id/history', authMiddleware, async (req, res) => {
+  try {
+    const row = await fetchEvent(req.user.id, req.params.id);
+    if (!row) return res.status(404).json({ error: 'Event not found' });
+    const company = String(row.company_name || '').trim();
+    if (!company) return res.json({ previous: [], next: [] });
+
+    const rows = await getAllCompat(
+      `${EVENT_SELECT} WHERE e.user_id = ? AND e.hidden = 0 AND e.id != ? AND LOWER(e.company_name) = LOWER(?) ORDER BY e.start_at ASC`,
+      `${EVENT_SELECT} WHERE e.user_id = $1 AND e.hidden = FALSE AND e.id != $2 AND LOWER(e.company_name) = LOWER($3) ORDER BY e.start_at ASC`,
+      [req.user.id, row.id, company]
+    );
+    const pivot = new Date(row.start_at).getTime();
+    const all = rows.map(formatEvent);
+    res.json({
+      previous: all.filter((e) => new Date(e.start).getTime() < pivot),
+      next: all.filter((e) => new Date(e.start).getTime() >= pivot)
+    });
+  } catch (error) {
+    console.error('Calendar event history error:', error);
+    res.status(500).json({ error: 'Failed to load event history', details: error.message });
+  }
+});
+
 router.get('/events/:id', authMiddleware, async (req, res) => {
   try {
     const row = await fetchEvent(req.user.id, req.params.id);
@@ -635,7 +673,8 @@ const EDITABLE = {
   applicationId: 'application_id',
   jdLink: 'jd_link',
   resumeLink: 'resume_link',
-  notes: 'notes'
+  notes: 'notes',
+  outcome: 'outcome'
 };
 
 router.put('/events/:id', authMiddleware, async (req, res) => {
@@ -652,7 +691,10 @@ router.put('/events/:id', authMiddleware, async (req, res) => {
       if (req.body[key] === undefined) continue;
       let value = req.body[key];
 
-      if (column === 'stage') {
+      if (column === 'outcome') {
+        value = value ? String(value) : null;
+        if (value && !OUTCOMES.includes(value)) return res.status(400).json({ error: 'Invalid outcome' });
+      } else if (column === 'stage') {
         value = value ? String(value) : 'not_sure';
         if (!STAGES.includes(value)) return res.status(400).json({ error: 'Invalid stage' });
       } else if (column === 'start_at' || column === 'end_at') {

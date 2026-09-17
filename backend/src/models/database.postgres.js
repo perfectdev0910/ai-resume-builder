@@ -269,6 +269,7 @@ async function initDatabase() {
         jd_link TEXT,
         resume_link TEXT,
         notes TEXT,
+        outcome VARCHAR(20),
         edited_fields TEXT,
         hidden BOOLEAN DEFAULT FALSE,
         synced_at TIMESTAMPTZ,
@@ -278,6 +279,7 @@ async function initDatabase() {
       )
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_calendar_events_user_start ON calendar_events(user_id, start_at)`);
+    await client.query(`ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS outcome VARCHAR(20)`);
     // Stage set was simplified; fold old values into the new ones
     await client.query(`UPDATE calendar_events SET stage = 'technical_screen' WHERE stage IN ('technical', 'assessment')`);
     await client.query(`UPDATE calendar_events SET stage = 'final' WHERE stage IN ('onsite_final', 'background_check')`);
