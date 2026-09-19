@@ -27,7 +27,6 @@ export default function Generate() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
-  const [preview, setPreview] = useState(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const generatingRef = useRef(false);
 
@@ -75,31 +74,11 @@ export default function Generate() {
     }
   };
 
-  const handlePreview = async () => {
-    if (!jobDescription.trim()) {
-      setError('Please enter a job description');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await cvAPI.preview(jobDescription);
-      setPreview(response.data.cvContent);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to generate preview');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleReset = () => {
     setJobDescription('');
     setJdLink('');
     setCompanyName('');
     setResult(null);
-    setPreview(null);
     setError('');
     setShowDuplicateModal(false);
   };
@@ -150,51 +129,12 @@ export default function Generate() {
     }
   };
 
-  const previewSkillLines = (skills) => {
-    if (!skills) return [];
-    if (Array.isArray(skills)) return skills.filter(Boolean);
-    if (typeof skills === 'string') {
-      return skills.split('\n').map((line) => line.trim()).filter(Boolean);
-    }
-    return [];
-  };
-
-  const previewExperienceBullets = (exp) => [
-    ...(Array.isArray(exp.responsibilities) ? exp.responsibilities : []),
-    ...(Array.isArray(exp.keyAchievements) ? exp.keyAchievements : []),
-    ...(Array.isArray(exp.achievements) ? exp.achievements : [])
-  ];
-
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Generate Tailored Resume & Cover Letter</h1>
-          <p className="text-gray-500 mt-1">Paste a job description and we'll create a perfectly tailored Resume and Cover Letter</p>
-        </div>
-        {!result && (
-          <button
-            type="button"
-            onClick={() => handleGenerate(false)}
-            disabled={loading || !jobDescription.trim()}
-            className="btn btn-primary px-6 shrink-0"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                Generating...
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Generate Resume & Cover Letter
-              </>
-            )}
-          </button>
-        )}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Generate Tailored Resume & Cover Letter</h1>
+        <p className="text-gray-500 mt-1">Paste a job description and we'll create a perfectly tailored Resume and Cover Letter</p>
       </div>
 
       {/* Duplicate Warning Modal */}
@@ -354,122 +294,30 @@ export default function Generate() {
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
-                onClick={handlePreview}
-                disabled={loading || !jobDescription.trim()}
-                className="btn btn-secondary"
-              >
-                Preview Content
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Preview Section */}
-        {preview && !result && (
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">CV Preview</h2>
-              <button onClick={() => setPreview(null)} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="prose prose-sm max-w-none">
-              {/* Summary */}
-              {preview.summary && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Professional Summary</h3>
-                  <p className="text-gray-700">{preview.summary}</p>
-                </div>
-              )}
-
-              {previewSkillLines(preview.skills).length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Skills</h3>
-                  <div className="space-y-2">
-                    {previewSkillLines(preview.skills).map((skill, idx) => (
-                      <p key={idx} className="text-gray-700 text-sm">{skill}</p>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {preview.experience?.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Experience</h3>
-                  {preview.experience.map((exp, idx) => (
-                    <div key={idx} className="mb-4 last:mb-0">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{exp.position}</h4>
-                          <p className="text-gray-600">{exp.company}</p>
-                        </div>
-                        <span className="text-sm text-gray-500">{exp.period}</span>
-                      </div>
-                      {exp.summary && (
-                        <p className="mt-1 text-sm text-gray-600 italic">{exp.summary}</p>
-                      )}
-                      {previewExperienceBullets(exp).length > 0 && (
-                        <ul className="mt-2 space-y-1 text-gray-700">
-                          {previewExperienceBullets(exp).map((ach, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <span className="text-primary-500 mt-1">•</span>
-                              {ach}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Education */}
-              {preview.education?.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Education</h3>
-                  {preview.education.map((edu, idx) => (
-                    <div key={idx} className="mb-2 last:mb-0">
-                      <h4 className="font-semibold text-gray-900">{edu.degree}</h4>
-                      <p className="text-gray-600">{edu.institution} • {edu.graduation}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Certifications */}
-              {preview.certifications?.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Certifications</h3>
-                  <ul className="space-y-1">
-                    {preview.certifications.map((cert, idx) => (
-                      <li key={idx} className="text-gray-700">• {cert}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-gray-100">
-              <p className="text-sm text-gray-500 mb-4">
-                Happy with this content? Click "Generate CV" to create downloadable documents.
-              </p>
-              <button
-                type="button"
                 onClick={() => handleGenerate(false)}
-                disabled={loading}
-                className="btn btn-primary"
+                disabled={loading || !jobDescription.trim()}
+                className="btn btn-primary px-6"
               >
-                {loading ? 'Generating...' : 'Generate CV Documents'}
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Generate Resume & Cover Letter
+                  </>
+                )}
               </button>
             </div>
           </div>
         )}
 
         {/* Tips */}
-        {!result && !preview && (
+        {!result && (
           <div className="card p-6 bg-blue-50 border-blue-200">
             <h3 className="font-semibold text-blue-800 mb-2">💡 Tips for best results</h3>
             <ul className="text-blue-700 space-y-1 text-sm">
