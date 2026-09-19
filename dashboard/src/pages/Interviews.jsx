@@ -499,6 +499,13 @@ function CalendarTab() {
     setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
   };
 
+  // Jump the calendar to another event (e.g. a previous step) and select it.
+  const navigateToEvent = (target) => {
+    const key = dayKeyInZone(target.start, timeZone, target.allDay);
+    if (key) setCursor(clampToMin(fromKey(key)));
+    setSelectedEventId(target.id);
+  };
+
   const handleRemoved = (id) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setSelectedEventId(null);
@@ -575,7 +582,15 @@ function CalendarTab() {
                   <button
                     key={v.id}
                     type="button"
-                    onClick={() => setView(v.id)}
+                    onClick={() => {
+                      // Keep the selected event on screen when the range shrinks (month -> week/day).
+                      const sel = events.find((e) => e.id === selectedEventId);
+                      if (sel) {
+                        const key = dayKeyInZone(sel.start, timeZone, sel.allDay);
+                        if (key) setCursor(clampToMin(fromKey(key)));
+                      }
+                      setView(v.id);
+                    }}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       view === v.id ? 'bg-primary-600 text-white' : 'text-gray-600 hover:text-gray-900 dark:text-gray-300'
                     }`}
@@ -648,6 +663,7 @@ function CalendarTab() {
                   event={panelEvent}
                   timeZone={timeZone}
                   isDefault={panelEvent.id !== selectedEventId}
+                  onNavigate={navigateToEvent}
                   onSaved={handleSaved}
                   onRemoved={handleRemoved}
                 />
@@ -903,7 +919,7 @@ async function downloadWithAuth(url, filename) {
   URL.revokeObjectURL(href);
 }
 
-function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
+function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved, onNavigate }) {
   const [editing, setEditing] = useState(false);
   const startLocal = toLocalInputs(event.start, timeZone, event.allDay);
   const endLocal = toLocalInputs(event.end, timeZone, event.allDay);
@@ -1077,7 +1093,7 @@ function EventEditor({ event, timeZone, isDefault, onSaved, onRemoved }) {
         </div>
 
         {!editing ? (
-          <EventSummary event={event} timeZone={timeZone} error={error} onDownload={download} />
+          <EventSummary event={event} timeZone={timeZone} error={error} onDownload={download} onNavigate={onNavigate} />
         ) : (
         <div className="overflow-y-auto p-5 space-y-5">
           {error && (
@@ -1279,7 +1295,7 @@ function AttendeeStatusIcon({ status }) {
   return null;
 }
 
-function EventSummary({ event, timeZone, error, onDownload }) {
+function EventSummary({ event, timeZone, error, onDownload, onNavigate }) {
   const attendees = event.attendees || [];
   const accepted = attendees.filter((a) => a.status === 'accepted').length;
   const application = event.application;
@@ -1334,16 +1350,24 @@ function EventSummary({ event, timeZone, error, onDownload }) {
               return (
                 <li key={step.id} className="pl-4">
                   <span className="absolute -left-[5px] mt-1.5 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-gray-900" style={{ backgroundColor: st.color }} />
-                  <p className="text-sm text-gray-900 dark:text-gray-100">
-                    {stg.label}
-                    <span className={`ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${st.className}`}>{st.label}</span>
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {step.allDay
-                      ? fromKey(step.start.slice(0, 10)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                      : formatInTimeZone(step.start, timeZone, 'MMM d, HH:mm')}
-                    {step.title && step.title !== step.companyName ? ` · ${step.title}` : ''}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate && onNavigate(step)}
+                    className="w-full text-left rounded-md -mx-1 px-1 py-0.5 hover:bg-gray-50 dark:hover:bg-gray-800/60"
+                    title="Go to this event"
+                    data-previous-step
+                  >
+                    <p className="text-sm text-gray-900 dark:text-gray-100">
+                      {stg.label}
+                      <span className={`ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${st.className}`}>{st.label}</span>
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {step.allDay
+                        ? fromKey(step.start.slice(0, 10)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : formatInTimeZone(step.start, timeZone, 'MMM d, HH:mm')}
+                      {step.title && step.title !== step.companyName ? ` · ${step.title}` : ''}
+                    </p>
+                  </button>
                 </li>
               );
             })}
