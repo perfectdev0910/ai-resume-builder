@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { cvAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import CompanySearch from '../components/CompanySearch';
+import QuestionAnswers from '../components/QuestionAnswers';
 
 // Helper to sanitize filename
 const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
@@ -463,6 +464,13 @@ Include:
           </div>
         </div>
       )}
+
+      {/* Application questions answered by AI */}
+      <QuestionAnswers
+        jobDescription={jobDescription}
+        companyName={companyName}
+        jobTitle={result?.application?.jobTitle || preview?.cvContent?.jobTitle || ''}
+      />
 
       {/* Tips */}
       {!result && !preview && (

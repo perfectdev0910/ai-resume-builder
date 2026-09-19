@@ -96,6 +96,7 @@ export const cvAPI = {
       companyName,
       force: options.force === true
     }),
+  answerQuestions: (data) => api.post('/cv/answers', data, { timeout: 180000 }),
   preview: (jobDescription) => 
     api.post('/cv/preview', { jobDescription }),
   downloadDocUrl: (applicationId) => {

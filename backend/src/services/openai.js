@@ -403,4 +403,55 @@ async function extractJobDetails(jdContent) {
   }
 }
 
-module.exports = { generateCVContent, generateCoverLetter, extractJobDetails };
+/**
+ * Answer one application-form question in the candidate's voice, grounded in their profile
+ * and the job description. Returns { answer }.
+ */
+async function answerApplicationQuestion({ question, profileText, jobDescription, jobTitle, companyName }) {
+  const systemPrompt = `You are helping a job candidate answer application-form and interview questions.
+Write the answer in the FIRST PERSON as the candidate. Ground every claim in the candidate profile —
+never invent employers, degrees, numbers, or experience that are not in the profile. Tailor the answer
+to the job description and company. Be specific, confident and natural; avoid clichés and filler.
+
+LENGTH RULE: the answer must be EXACTLY TWO sentences. The first sentence should draw on the
+candidate's relevant experience or skills; the second should connect it to this job or company.
+If the question only needs a fact (yes/no, a number, a date), still give two short sentences.
+Do not add a greeting, sign-off, bullet points, or the question text.
+
+OUTPUT FORMAT (JSON): {"answer": "..."}`;
+
+  const userPrompt = `## CANDIDATE PROFILE
+${profileText}
+
+## JOB
+${jobTitle ? `Title: ${jobTitle}
+` : ''}${companyName ? `Company: ${companyName}
+` : ''}
+## JOB DESCRIPTION
+${String(jobDescription || '').slice(0, 6000)}
+
+## QUESTION
+${question}`;
+
+  try {
+    const result = await chatJson({
+      model: getModel(),
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 400
+    });
+    const answer = typeof result?.answer === 'string' ? result.answer.trim() : '';
+    if (!answer) throw new Error('Empty answer from model');
+    return { answer };
+  } catch (error) {
+    console.error('DeepSeek question answering error:', error);
+    throw new Error(error.message === 'DEEPSEEK_API_KEY is not configured'
+      ? error.message
+      : `Failed to answer question: ${describeUpstreamError(error)}`);
+  }
+}
+
+module.exports = { generateCVContent, generateCoverLetter, extractJobDetails, answerApplicationQuestion };
