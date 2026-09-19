@@ -15,6 +15,7 @@ const db = process.env.DATABASE_URL
 
 // Use cloud storage in production
 const cvGenerator = require('../services/cvGenerator.cloud');
+const { getStyle, listStyles } = require('../services/documentRenderer');
 
 
 
@@ -45,6 +46,11 @@ function resolveStoredFile(application, ...keys) {
   }
   return null;
 }
+
+// Available document styles for the Generate page
+router.get('/styles', authMiddleware, (req, res) => {
+  res.json({ styles: listStyles() });
+});
 
 router.post('/generate', authMiddleware, async (req, res) => {
   // Step timings show up in server logs so a stalled generation can be traced to a step.
@@ -210,9 +216,12 @@ router.post('/generate', authMiddleware, async (req, res) => {
     const resumeFilename = `${user.full_name}_Resume`;
     const coverLetterFilename = `${user.full_name}_Cover Letter`;
 
+    // Visual style for the documents (see documentRenderer.STYLES); unknown values fall back to default.
+    const style = getStyle(req.body.template).id;
     const docOptions = {
       credlyProfileLink: user.credly_profile_link || null,
-      tags: tags.map(t => t.tag)
+      tags: tags.map(t => t.tag),
+      style
     };
 
     const [docxResult, pdfResult] = await Promise.all([
@@ -224,8 +233,8 @@ router.post('/generate', authMiddleware, async (req, res) => {
     let coverLetterPdfResult = null;
     if (coverLetterContent) {
       [coverLetterDocxResult, coverLetterPdfResult] = await Promise.all([
-        cvGenerator.generateCoverLetterDocx(coverLetterContent, user, coverLetterFilename),
-        cvGenerator.generateCoverLetterPdf(coverLetterContent, user, coverLetterFilename)
+        cvGenerator.generateCoverLetterDocx(coverLetterContent, user, coverLetterFilename, { style }),
+        cvGenerator.generateCoverLetterPdf(coverLetterContent, user, coverLetterFilename, { style })
       ]);
     }
 

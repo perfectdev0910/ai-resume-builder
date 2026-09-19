@@ -3,6 +3,7 @@ import { cvAPI } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import CompanySearch from '../components/CompanySearch';
 import QuestionAnswers from '../components/QuestionAnswers';
+import StylePicker from '../components/StylePicker';
 
 // Helper to sanitize filename
 const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').trim();
@@ -23,6 +24,7 @@ export default function Generate() {
   const { user } = useAuth();
   const [jobDescription, setJobDescription] = useState('');
   const [jdLink, setJdLink] = useState('');
+  const [template, setTemplate] = useState('classic');
   const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -57,7 +59,7 @@ export default function Generate() {
     setShowDuplicateModal(false);
 
     try {
-      const response = await cvAPI.generate(jobDescription, jdLink, normalizedCompany, { force });
+      const response = await cvAPI.generate(jobDescription, jdLink, normalizedCompany, { force, template });
       setResult(response.data);
       if (response.data?.warning) {
         setError(response.data.warning);
@@ -290,6 +292,8 @@ export default function Generate() {
                 disabled={loading}
               />
             </div>
+
+            <StylePicker value={template} onChange={setTemplate} disabled={loading} />
 
             <div className="flex gap-3 pt-2">
               <button

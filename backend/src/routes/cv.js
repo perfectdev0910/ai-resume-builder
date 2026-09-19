@@ -10,6 +10,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { generateCVContent, generateCoverLetter, extractJobDetails } = require('../services/openai');
 const { prettyCompanyName } = require('../utils/companyName');
 const { generateDocx, generatePdf, generateCoverLetterDocx, generateCoverLetterPdf } = require('../services/cvGenerator');
+const { getStyle, listStyles } = require('../services/documentRenderer');
 
 const router = express.Router();
 
@@ -84,6 +85,11 @@ async function runQueryCompat(sqliteSql, postgresSql, params = []) {
 }
 
 // Generate CV and Cover Letter from job description
+// Available document styles for the Generate page
+router.get('/styles', authMiddleware, (req, res) => {
+  res.json({ styles: listStyles() });
+});
+
 router.post('/generate', authMiddleware, async (req, res) => {
   try {
     const {
@@ -250,9 +256,12 @@ router.post('/generate', authMiddleware, async (req, res) => {
     const resumeFilename = `${user.full_name}_Resume`;
     const coverLetterFilename = `${user.full_name}_Cover Letter`;
 
+    // Visual style for the documents (see documentRenderer.STYLES); unknown values fall back to default.
+    const style = getStyle(req.body.template).id;
     const docOptions = {
       credlyProfileLink: user.credly_profile_link || null,
-      tags: tags.map(t => t.tag)
+      tags: tags.map(t => t.tag),
+      style
     };
 
     const [docxResult, pdfResult] = await Promise.all([
@@ -264,8 +273,8 @@ router.post('/generate', authMiddleware, async (req, res) => {
     let coverLetterPdfResult = null;
     if (coverLetterContent) {
       [coverLetterDocxResult, coverLetterPdfResult] = await Promise.all([
-        generateCoverLetterDocx(coverLetterContent, user, coverLetterFilename),
-        generateCoverLetterPdf(coverLetterContent, user, coverLetterFilename)
+        generateCoverLetterDocx(coverLetterContent, user, coverLetterFilename, { style }),
+        generateCoverLetterPdf(coverLetterContent, user, coverLetterFilename, { style })
       ]);
     }
 

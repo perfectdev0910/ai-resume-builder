@@ -94,7 +94,8 @@ export const cvAPI = {
       jobDescription,
       jdLink,
       companyName,
-      force: options.force === true
+      force: options.force === true,
+      template: options.template || 'classic'
     }),
   answerQuestions: (data) => api.post('/cv/answers', data, { timeout: 180000 }),
   preview: (jobDescription) => 
