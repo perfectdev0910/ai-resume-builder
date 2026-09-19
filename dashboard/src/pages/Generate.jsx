@@ -486,8 +486,8 @@ export default function Generate() {
       <div className="min-w-0 xl:sticky xl:top-4">
         <QuestionAnswers
           jobDescription={jobDescription}
-          companyName={companyName}
-          jobTitle={result?.application?.jobTitle || preview?.cvContent?.jobTitle || ''}
+          companyName={result?.application?.companyName || companyName}
+          jobTitle={result?.application?.jobTitle || ''}
         />
       </div>
       </div>
