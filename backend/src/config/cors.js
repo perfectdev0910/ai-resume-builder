@@ -33,8 +33,11 @@ function applyCors(app) {
     if (isOriginAllowed(origin, allowedOrigins)) return next();
 
     console.warn(`CORS rejected origin ${origin} (allowed: ${allowedOrigins.join(', ') || 'none'})`);
+    const hint = String(origin || '').startsWith('chrome-extension://')
+      ? `Add the extension ID (${origin.slice('chrome-extension://'.length)}) to CHROME_EXTENSION_IDS on the API server.`
+      : 'Add it to FRONTEND_URL on the API server.';
     res.status(403).json({
-      error: `Origin ${origin} is not allowed by CORS. Add it to FRONTEND_URL on the API server.`
+      error: `Origin ${origin} is not allowed by CORS. ${hint}`
     });
   });
 
