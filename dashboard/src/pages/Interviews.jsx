@@ -904,6 +904,62 @@ function TimeGridView({ days, eventsByDay, todayKey, selectedEventId, timeZone, 
 /* Event detail / edit panel (right side)                              */
 /* ------------------------------------------------------------------ */
 
+// Recordings live behind the protected /uploads route (local) or on cloud storage (absolute URL).
+function recordingSrc(url) {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '').replace(/\/api$/i, '');
+  const token = localStorage.getItem('authToken');
+  return `${apiBase}${url}${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
+}
+
+function formatClock(sec) {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function RecordingSection({ event, timeZone }) {
+  const [showTranscript, setShowTranscript] = useState(false);
+  const src = recordingSrc(event.recordingUrl);
+  const transcript = Array.isArray(event.transcript) ? event.transcript : [];
+  if (!src && !event.summary && !transcript.length) return null;
+  return (
+    <section className="space-y-2" data-recording-section>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Recording & summary</p>
+        {event.recordedAt && (
+          <span className="text-xs text-gray-400">
+            {formatInTimeZone(event.recordedAt, timeZone, 'MMM d, HH:mm')}{event.recordingDurationSec ? ` · ${formatClock(event.recordingDurationSec)}` : ''}
+          </span>
+        )}
+      </div>
+      {src && <audio controls preload="none" src={src} className="w-full" data-recording-audio />}
+      {event.summary && (
+        <div className="rounded-lg bg-emerald-50/70 px-3 py-2 text-sm text-gray-700 whitespace-pre-wrap break-words dark:bg-emerald-900/20 dark:text-gray-200" data-summary>
+          {event.summary}
+        </div>
+      )}
+      {transcript.length > 0 && (
+        <div>
+          <button type="button" className="text-xs text-primary-600 hover:underline" onClick={() => setShowTranscript((v) => !v)}>
+            {showTranscript ? 'Hide transcript' : `Show transcript (${transcript.length} lines)`}
+          </button>
+          {showTranscript && (
+            <ol className="mt-2 max-h-72 overflow-y-auto space-y-1 rounded-lg border border-gray-100 p-2 text-xs dark:border-gray-800" data-transcript>
+              {transcript.map((t, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-gray-400 shrink-0 tabular-nums">{formatClock(t.at)}</span>
+                  <span className="text-gray-700 dark:text-gray-300"><span className="font-medium">{t.speaker || 'Interviewer'}:</span> {t.text}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 async function downloadWithAuth(url, filename) {
   const token = localStorage.getItem('authToken');
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -1458,6 +1514,8 @@ function EventSummary({ event, timeZone, error, onDownload, onNavigate }) {
           <p className="text-sm text-gray-400">No description.</p>
         )}
       </section>
+
+      <RecordingSection event={event} timeZone={timeZone} />
 
       {/* My note */}
       <section className="space-y-1.5">

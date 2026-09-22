@@ -209,6 +209,11 @@ function initDatabase() {
           resume_link TEXT,
           notes TEXT,
           outcome TEXT,
+          recording_url TEXT,
+          recording_duration_sec INTEGER,
+          recorded_at DATETIME,
+          transcript TEXT,
+          summary TEXT,
           edited_fields TEXT,
           hidden INTEGER DEFAULT 0,
           synced_at DATETIME,
@@ -220,6 +225,9 @@ function initDatabase() {
         )
       `);
       database.run(`ALTER TABLE calendar_events ADD COLUMN outcome TEXT`, () => {});
+      for (const col of ['recording_url TEXT', 'recording_duration_sec INTEGER', 'recorded_at DATETIME', 'transcript TEXT', 'summary TEXT']) {
+        database.run(`ALTER TABLE calendar_events ADD COLUMN ${col}`, () => {});
+      }
       // Stage set was simplified; fold old values into the new ones
       database.run(`UPDATE calendar_events SET stage = 'technical_screen' WHERE stage IN ('technical', 'assessment')`, () => {});
       database.run(`UPDATE calendar_events SET stage = 'final' WHERE stage IN ('onsite_final', 'background_check')`, () => {});

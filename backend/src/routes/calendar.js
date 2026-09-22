@@ -169,6 +169,17 @@ async function googleGet(accessToken, url) {
 
 const OUTCOMES = ['passed', 'failed'];
 
+function publicRecordingUrl(stored) {
+  if (!stored) return null;
+  if (/^https?:\/\//i.test(stored)) return stored;
+  return `/uploads/${String(stored).split('/').pop()}`;
+}
+
+function parseTranscript(raw) {
+  if (!raw) return [];
+  try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
 // Upcoming until the event has ended, then waiting for feedback — unless the user
 // recorded a result (passed / failed), which always wins.
 function computeStatus(row) {
@@ -220,6 +231,11 @@ function formatEvent(row) {
     notes: row.notes || '',
     outcome: OUTCOMES.includes(row.outcome) ? row.outcome : null,
     status: computeStatus(row),
+    recordingUrl: publicRecordingUrl(row.recording_url),
+    recordingDurationSec: row.recording_duration_sec != null ? Number(row.recording_duration_sec) : null,
+    recordedAt: iso(row.recorded_at),
+    transcript: parseTranscript(row.transcript),
+    summary: row.summary || '',
     editedFields,
     syncedAt: iso(row.synced_at),
     updatedAt: iso(row.updated_at)
@@ -444,7 +460,10 @@ function startAutoSync() {
 
 
 function respondError(res, error, fallback) {
-  const status = error.status && error.status >= 400 && error.status < 600 ? error.status : 500;
+  // Never forward Google's 401/403 as our own: the dashboard treats 401 as "logged out".
+  // A Google auth problem is a "reconnect your calendar" situation (409), not a session problem.
+  let status = error.status && error.status >= 400 && error.status < 600 ? error.status : 500;
+  if (status === 401 || status === 403) status = error.reconnect ? 409 : 502;
   res.status(status).json({
     error: error.reconnect ? error.message : fallback,
     details: error.message,
@@ -803,6 +822,9 @@ router.delete('/google', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.formatEvent = formatEvent;
+module.exports.fetchEvent = fetchEvent;
+module.exports.EVENT_SELECT = EVENT_SELECT;
 module.exports.syncEvents = syncEvents;
 module.exports.syncAllConnected = syncAllConnected;
 module.exports.startAutoSync = startAutoSync;

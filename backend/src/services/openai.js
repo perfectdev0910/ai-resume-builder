@@ -489,4 +489,67 @@ async function streamChat({ messages, kind = 'fast', temperature = 0.6, max_toke
   }
 }
 
-module.exports = { generateCVContent, generateCoverLetter, extractJobDetails, answerApplicationQuestion, streamChat };
+/**
+ * Post-interview summary for the candidate's own review and for briefing later rounds.
+ * Returns plain text with short sections.
+ */
+async function summarizeInterview({ candidateName, companyName, jobTitle, stage, transcript = [], qa = [] }) {
+  const stamp = (sec) => `${Math.floor((sec || 0) / 60)}:${String(Math.floor((sec || 0) % 60)).padStart(2, '0')}`;
+  const transcriptText = transcript
+    .map((t) => `[${stamp(t.at)}] ${t.speaker || 'Interviewer'}: ${t.text}`)
+    .join('\n')
+    .slice(0, 24000);
+  const qaText = qa
+    .map((t, i) => `Q${i + 1}: ${t.question}\nSuggested answer: ${t.answer}`)
+    .join('\n\n')
+    .slice(0, 8000);
+
+  const systemPrompt = `You write concise, useful post-interview summaries for a job candidate. You are given the interviewer-side transcript of a live interview (the candidate's own words were not recorded) plus the questions that were detected and the answers suggested at the time.
+Write for the candidate to re-read before the next round. Be specific and factual; do not invent anything that is not in the material.
+
+OUTPUT FORMAT (JSON):
+{
+  "overview": "2-3 sentences: what the interview covered and how it went",
+  "questions": ["each question the interviewer asked, in order, one line each"],
+  "topics": ["key themes / technologies / requirements the interviewer emphasised"],
+  "signals": ["anything the interviewer said about the role, team, process, timeline or expectations"],
+  "followUps": ["concrete things to prepare or clarify before the next round"],
+  "nextSteps": "what the interviewer said happens next, or empty string"
+}`;
+
+  const userPrompt = `Candidate: ${candidateName}
+Company: ${companyName || 'unknown'} · Role: ${jobTitle || 'unknown'} · Stage: ${stage ? stage.replace(/_/g, ' ') : 'unknown'}
+
+## INTERVIEWER TRANSCRIPT
+${transcriptText || '(no transcript captured)'}
+
+## DETECTED QUESTIONS AND SUGGESTED ANSWERS
+${qaText || '(none)'}`;
+
+  const result = await chatJson({
+    model: getModel(),
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.3,
+    max_tokens: 1400
+  });
+
+  const lines = [];
+  if (result.overview) lines.push(String(result.overview).trim());
+  const list = (title, items) => {
+    const arr = Array.isArray(items) ? items.map((x) => String(x).trim()).filter(Boolean) : [];
+    if (arr.length) lines.push('', `${title}:`, ...arr.map((x) => `- ${x}`));
+  };
+  list('Questions asked', result.questions);
+  list('Key topics', result.topics);
+  list('What the interviewer said', result.signals);
+  list('Prepare for next time', result.followUps);
+  if (result.nextSteps) lines.push('', `Next steps: ${String(result.nextSteps).trim()}`);
+  const text = lines.join('\n').trim();
+  if (!text) throw new Error('Empty summary from model');
+  return text;
+}
+
+module.exports = { generateCVContent, generateCoverLetter, extractJobDetails, answerApplicationQuestion, streamChat, summarizeInterview };

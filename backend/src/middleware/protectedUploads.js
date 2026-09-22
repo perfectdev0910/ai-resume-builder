@@ -65,13 +65,20 @@ async function serveProtectedUpload(req, res) {
         [req.user.id, `%${filename}`, `%${filename}`, `%${filename}`, `%${filename}`]
       );
 
-      if (!owned) {
+      const ownedRecording = owned ? null : await getOneCompat(
+        'SELECT id FROM calendar_events WHERE user_id = ? AND recording_url LIKE ? LIMIT 1',
+        'SELECT id FROM calendar_events WHERE user_id = $1 AND recording_url LIKE $2 LIMIT 1',
+        [req.user.id, `%${filename}`]
+      );
+      if (!owned && !ownedRecording) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
 
     const cleanFilename = getCleanDownloadFilename(filename);
-    res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"`);
+    // Recordings play inline (audio element); documents download.
+    const inline = /.(webm|ogg|mp3|wav|m4a)$/i.test(filename);
+    res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${cleanFilename}"`);
     return res.sendFile(filepath);
   } catch (error) {
     console.error('Protected upload error:', error);
