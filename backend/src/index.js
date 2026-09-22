@@ -12,6 +12,7 @@ const userRoutes = require('./routes/users');
 const applicationRoutes = require('./routes/applications');
 const calendarRoutes = require('./routes/calendar');
 const answersRoutes = require('./routes/answers');
+const interviewRoutes = require('./routes/interview');
 const cvRoutes = require('./routes/cv');
 const { initDatabase, initAdminAccount, migrateExistingUsers } = require('./models/database');
 
@@ -54,6 +55,7 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/cv/generate', generateLimiter);
 app.use('/api/cv/answers', generateLimiter, answersRoutes);
+app.use('/api/interview', interviewRoutes);
 app.use('/api/cv', cvRoutes);
 
 app.get('/api/health', (req, res) => {

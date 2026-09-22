@@ -454,4 +454,39 @@ ${question}`;
   }
 }
 
-module.exports = { generateCVContent, generateCoverLetter, extractJobDetails, answerApplicationQuestion };
+/**
+ * Streaming plain-text completion. Calls onToken for each content delta and resolves with
+ * the full text. Thinking is disabled and there is no JSON mode — this is for spoken answers
+ * where time-to-first-token matters more than structure.
+ */
+async function streamChat({ messages, kind = 'fast', temperature = 0.6, max_tokens = 400, signal, onToken }) {
+  const client = getClient();
+  const model = getModel(kind);
+  const startedAt = Date.now();
+  let first = true;
+  let full = '';
+  try {
+    const stream = await client.chat.completions.create(
+      { model, messages, temperature, max_tokens, stream: true, thinking: { type: 'disabled' } },
+      { signal }
+    );
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (!delta) continue;
+      if (first) {
+        console.log(`DeepSeek ${model} first token in ${Date.now() - startedAt}ms`);
+        first = false;
+      }
+      full += delta;
+      if (onToken) onToken(delta);
+    }
+    return full;
+  } catch (error) {
+    if (signal?.aborted) return full;
+    throw new Error(error.message === 'DEEPSEEK_API_KEY is not configured'
+      ? error.message
+      : describeUpstreamError(error));
+  }
+}
+
+module.exports = { generateCVContent, generateCoverLetter, extractJobDetails, answerApplicationQuestion, streamChat };
