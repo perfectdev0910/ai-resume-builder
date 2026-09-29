@@ -147,6 +147,8 @@ export const applicationsAPI = {
   update: (id, data) => api.put(`/applications/${id}`, data),
   delete: (id) => api.delete(`/applications/${id}`),
   checkDuplicate: (companyName) => api.get('/applications/check-duplicate', { params: { companyName } }),
+  // Returns the .xlsx itself, so the response has to stay binary.
+  exportExcel: (params = {}) => api.get('/applications/export', { params, responseType: 'blob' }),
   getCompanies: (q = '') =>
     api.get('/applications/companies', { params: q ? { q } : {} }),
   

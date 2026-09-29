@@ -66,6 +66,9 @@ export default function History() {
   const [filter, setFilter] = useState('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [searchQuery, setSearchQuery] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [exportNote, setExportNote] = useState('');
+  const [excludeLinkedIn, setExcludeLinkedIn] = useState(true);
   const userTimezone = resolveTimeZone(user?.timezone || 'UTC');
 
   useEffect(() => {
@@ -142,6 +145,62 @@ export default function History() {
     fetchApplications('');
   };
 
+  /* ---- Excel export of the chosen date range ---- */
+
+  // The API names the file; fall back only if the header is missing.
+  const filenameFrom = (disposition) => {
+    const match = /filename="?([^"]+)"?/i.exec(disposition || '');
+    return match ? match[1] : 'applications.xlsx';
+  };
+
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportNote('');
+    try {
+      const params = {};
+      if (dateRange.start) params.startDate = dateRange.start;
+      if (dateRange.end) params.endDate = dateRange.end;
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (excludeLinkedIn) params.excludeLinkedIn = 'true';
+
+      const response = await applicationsAPI.exportExcel(params);
+      const rows = Number(response.headers['x-row-count'] || 0);
+      if (!rows) {
+        setExportNote('No applications in that range — nothing to download.');
+        return;
+      }
+
+      const url = URL.createObjectURL(new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filenameFrom(response.headers['content-disposition']);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+      setExportNote(rows >= 5000
+        ? `Downloaded 5000 applications — the export is capped, so narrow the dates for the rest.`
+        : `Downloaded ${rows} application${rows === 1 ? '' : 's'}.`);
+    } catch (error) {
+      // With responseType 'blob' the error body is a Blob, so read it back as text.
+      let message = 'Export failed.';
+      try {
+        const body = error.response?.data;
+        const text = body instanceof Blob ? await body.text() : '';
+        if (text) message = JSON.parse(text).error || message;
+      } catch {
+        // keep the generic message
+      }
+      setExportNote(message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
 
   return (
     <div className="space-y-6">
@@ -214,6 +273,40 @@ export default function History() {
               Search
             </button>
           </div>
+        </div>
+
+        {/* Export of whatever the filters above select */}
+        <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="btn btn-secondary py-1.5 text-sm disabled:opacity-50"
+            title="Download the selected date range as an Excel file"
+          >
+            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {exporting ? 'Preparing…' : 'Download Excel'}
+          </button>
+
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={excludeLinkedIn}
+              onChange={e => setExcludeLinkedIn(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Exclude LinkedIn jobs
+          </label>
+
+          <span className="text-xs text-gray-500">
+            {dateRange.start || dateRange.end
+              ? `${dateRange.start || 'the beginning'} to ${dateRange.end || 'today'}`
+              : 'All dates — pick a range above to narrow it'}
+            {searchQuery.trim() ? ` · company contains “${searchQuery.trim()}”` : ''}
+          </span>
+
+          {exportNote && <span className="text-xs text-gray-600 ml-auto">{exportNote}</span>}
         </div>
       </div>
 

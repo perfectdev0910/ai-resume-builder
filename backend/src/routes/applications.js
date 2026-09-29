@@ -12,6 +12,7 @@ const { prettyCompanyName } = require('../utils/companyName');
 const { resolveTimeZone, sqlUtc, getPeriodRange, localDateKey } = require('../utils/timezone');
 const { clampLimit } = require('../config/env');
 const storage = require('../services/storage');
+const { buildXlsx } = require('../utils/xlsxWriter');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
@@ -148,6 +149,91 @@ router.get('/check-duplicate', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Duplicate check error:', error);
     res.status(500).json({ error: 'Failed to check for duplicates', details: error.message });
+  }
+});
+
+/**
+ * Excel export of the history, for a date range the user picks.
+ *
+ * Deliberately not paginated — the point is to get the whole range in one file —
+ * so the row count is capped to keep one request from building an unbounded sheet.
+ */
+const EXPORT_MAX_ROWS = 5000;
+const LINKEDIN_LINK = '%linkedin.%';
+
+router.get('/export', authMiddleware, async (req, res) => {
+  try {
+    const { startDate, endDate, search, excludeLinkedIn } = req.query;
+    const params = [req.user.id];
+    const nextParam = () => (isPostgres ? `$${params.length + 1}` : '?');
+
+    let sqliteFilter = '';
+    let postgresFilter = '';
+
+    if (startDate) {
+      sqliteFilter += ' AND DATE(applied_at) >= ?';
+      postgresFilter += ` AND DATE(applied_at) >= ${nextParam()}`;
+      params.push(startDate);
+    }
+    if (endDate) {
+      sqliteFilter += ' AND DATE(applied_at) <= ?';
+      postgresFilter += ` AND DATE(applied_at) <= ${nextParam()}`;
+      params.push(endDate);
+    }
+    if (search && search.trim()) {
+      sqliteFilter += ' AND LOWER(company_name) LIKE LOWER(?)';
+      postgresFilter += ` AND LOWER(company_name) LIKE LOWER(${nextParam()})`;
+      params.push(`%${search.trim()}%`);
+    }
+    if (excludeLinkedIn === 'true' || excludeLinkedIn === '1') {
+      // Match the link, not the company: a job hosted on LinkedIn is the thing to drop,
+      // and an application to LinkedIn the company is a legitimate row.
+      sqliteFilter += ' AND (jd_link IS NULL OR LOWER(jd_link) NOT LIKE ?)';
+      postgresFilter += ` AND (jd_link IS NULL OR LOWER(jd_link) NOT LIKE ${nextParam()})`;
+      params.push(LINKEDIN_LINK);
+    }
+
+    const rows = await getAllCompat(
+      `SELECT company_name, job_title, jd_link, applied_at
+       FROM applications
+       WHERE user_id = ? ${sqliteFilter}
+       ORDER BY applied_at ASC, id ASC
+       LIMIT ${EXPORT_MAX_ROWS}`,
+      `SELECT company_name, job_title, jd_link, applied_at
+       FROM applications
+       WHERE user_id = $1 ${postgresFilter}
+       ORDER BY applied_at ASC, id ASC
+       LIMIT ${EXPORT_MAX_ROWS}`,
+      params
+    );
+
+    const workbook = buildXlsx({
+      sheetName: 'Applications',
+      columns: [
+        { header: 'No', key: 'no', width: 6 },
+        { header: 'Company Name', key: 'company', width: 34 },
+        { header: 'Job Title', key: 'title', width: 52 },
+        { header: 'JD link', key: 'link', width: 80 }
+      ],
+      rows: rows.map((row, index) => ({
+        no: index + 1,
+        company: row.company_name || '',
+        title: row.job_title || '',
+        link: row.jd_link ? { text: row.jd_link, link: row.jd_link } : ''
+      }))
+    });
+
+    const stamp = (value, fallback) => (value ? String(value).slice(0, 10) : fallback);
+    const filename = `applications-${stamp(startDate, 'all')}-to-${stamp(endDate, localDateKey(new Date(), resolveTimeZone(req.user.timezone)))}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Row-Count', String(rows.length));
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Row-Count');
+    res.send(workbook);
+  } catch (error) {
+    console.error('Application export error:', error);
+    res.status(500).json({ error: 'Failed to export applications', details: error.message });
   }
 });
 
