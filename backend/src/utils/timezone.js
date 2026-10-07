@@ -129,6 +129,7 @@ function getPeriodRange(timeZone, period, now = new Date()) {
 
 module.exports = {
   resolveTimeZone,
+  zonedLocalToUtc,
   sqlUtc,
   localDateKey,
   getPeriodRange

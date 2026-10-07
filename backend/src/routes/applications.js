@@ -9,10 +9,11 @@ const db = isPostgres
 
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 const { prettyCompanyName } = require('../utils/companyName');
-const { resolveTimeZone, sqlUtc, getPeriodRange, localDateKey } = require('../utils/timezone');
+const { resolveTimeZone, sqlUtc, getPeriodRange, localDateKey, zonedLocalToUtc } = require('../utils/timezone');
 const { clampLimit } = require('../config/env');
 const storage = require('../services/storage');
 const { buildXlsx } = require('../utils/xlsxWriter');
+const { buildZip } = require('../utils/zipWriter');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
@@ -161,51 +162,98 @@ router.get('/check-duplicate', authMiddleware, async (req, res) => {
 const EXPORT_MAX_ROWS = 5000;
 const LINKEDIN_LINK = '%linkedin.%';
 
+/**
+ * Builds the WHERE clause both exports share: a date range, an optional company
+ * search, and the option to leave LinkedIn-hosted postings out.
+ */
+function buildHistoryFilter(userId, { startDate, endDate, search, excludeLinkedIn, timezone }) {
+  const params = [userId];
+  const nextParam = () => (isPostgres ? `$${params.length + 1}` : '?');
+  let sqliteFilter = '';
+  let postgresFilter = '';
+
+  // Dates mean the caller's calendar days, not the stored UTC ones: "6 October" in
+  // Los Angeles runs from 07:00Z to 07:00Z the next day. Comparing DATE(applied_at)
+  // instead would misfile every application made after 5pm local time.
+  const zone = resolveTimeZone(timezone);
+  const dayStartUtc = (value, addDays = 0) => {
+  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number);
+  const start = zonedLocalToUtc(zone, y, m, d, 0, 0, 0);
+  return sqlUtc(addDays ? new Date(start.getTime() + addDays * 86400000) : start);
+  };
+
+  if (startDate) {
+  sqliteFilter += ' AND datetime(applied_at) >= datetime(?)';
+  postgresFilter += ` AND applied_at >= ${nextParam()}`;
+  params.push(dayStartUtc(startDate));
+  }
+  if (endDate) {
+  sqliteFilter += ' AND datetime(applied_at) < datetime(?)';
+  postgresFilter += ` AND applied_at < ${nextParam()}`;
+  params.push(dayStartUtc(endDate, 1));
+  }
+    if (search && search.trim()) {
+    sqliteFilter += ' AND LOWER(company_name) LIKE LOWER(?)';
+    postgresFilter += ` AND LOWER(company_name) LIKE LOWER(${nextParam()})`;
+    params.push(`%${search.trim()}%`);
+  }
+  if (excludeLinkedIn === 'true' || excludeLinkedIn === '1') {
+    // Match the link, not the company: a job hosted on LinkedIn is the thing to drop,
+    // and an application to LinkedIn the company is a legitimate row.
+    sqliteFilter += ' AND (jd_link IS NULL OR LOWER(jd_link) NOT LIKE ?)';
+    postgresFilter += ` AND (jd_link IS NULL OR LOWER(jd_link) NOT LIKE ${nextParam()})`;
+    params.push(LINKEDIN_LINK);
+  }
+
+  return { params, sqliteFilter, postgresFilter };
+}
+
+/** The rows of one export, oldest first so the numbering reads like a diary. */
+async function loadHistoryRows(userId, query, columns, limit) {
+  const { params, sqliteFilter, postgresFilter } = buildHistoryFilter(userId, query);
+  return getAllCompat(
+    `SELECT ${columns} FROM applications WHERE user_id = ? ${sqliteFilter} ORDER BY applied_at ASC, id ASC LIMIT ${limit}`,
+    `SELECT ${columns} FROM applications WHERE user_id = $1 ${postgresFilter} ORDER BY applied_at ASC, id ASC LIMIT ${limit}`,
+    params
+  );
+}
+
+const HISTORY_COLUMNS = 'company_name, job_title, jd_link, applied_at';
+
+function exportFilename(query, timezone, extension) {
+  const stamp = (value, fallback) => (value ? String(value).slice(0, 10) : fallback);
+  return `applications-${stamp(query.startDate, 'all')}-to-${stamp(query.endDate, localDateKey(new Date(), timezone))}.${extension}`;
+}
+
+/** The CSV every spreadsheet opens: BOM first, CRLF line endings, quotes doubled. */
+function toCsv(rows) {
+  const cell = (value) => {
+    const text = String(value ?? '');
+    return /["\r\n,]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = ['No,Company Name,Job Title,JD link'];
+  rows.forEach((row, index) => {
+    lines.push([index + 1, row.company_name || '', row.job_title || '', row.jd_link || ''].map(cell).join(','));
+  });
+  // The BOM is what makes Excel read a UTF-8 CSV without mangling accents.
+  return '\ufeff' + lines.join('\r\n') + '\r\n';
+}
+
 router.get('/export', authMiddleware, async (req, res) => {
   try {
-    const { startDate, endDate, search, excludeLinkedIn } = req.query;
-    const params = [req.user.id];
-    const nextParam = () => (isPostgres ? `$${params.length + 1}` : '?');
+    // An explicit ?timezone= wins (the browser sends its own), else the profile's.
+    const timezone = resolveTimeZone(req.query.timezone || req.user.timezone);
+    const rows = await loadHistoryRows(req.user.id, { ...req.query, timezone }, HISTORY_COLUMNS, EXPORT_MAX_ROWS);
 
-    let sqliteFilter = '';
-    let postgresFilter = '';
-
-    if (startDate) {
-      sqliteFilter += ' AND DATE(applied_at) >= ?';
-      postgresFilter += ` AND DATE(applied_at) >= ${nextParam()}`;
-      params.push(startDate);
+    // Same data either way; the spreadsheet is the default, CSV on request.
+    if (String(req.query.format || '').toLowerCase() === 'csv') {
+      const filename = exportFilename(req.query, timezone, 'csv');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('X-Row-Count', String(rows.length));
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Row-Count');
+      return res.send(toCsv(rows));
     }
-    if (endDate) {
-      sqliteFilter += ' AND DATE(applied_at) <= ?';
-      postgresFilter += ` AND DATE(applied_at) <= ${nextParam()}`;
-      params.push(endDate);
-    }
-    if (search && search.trim()) {
-      sqliteFilter += ' AND LOWER(company_name) LIKE LOWER(?)';
-      postgresFilter += ` AND LOWER(company_name) LIKE LOWER(${nextParam()})`;
-      params.push(`%${search.trim()}%`);
-    }
-    if (excludeLinkedIn === 'true' || excludeLinkedIn === '1') {
-      // Match the link, not the company: a job hosted on LinkedIn is the thing to drop,
-      // and an application to LinkedIn the company is a legitimate row.
-      sqliteFilter += ' AND (jd_link IS NULL OR LOWER(jd_link) NOT LIKE ?)';
-      postgresFilter += ` AND (jd_link IS NULL OR LOWER(jd_link) NOT LIKE ${nextParam()})`;
-      params.push(LINKEDIN_LINK);
-    }
-
-    const rows = await getAllCompat(
-      `SELECT company_name, job_title, jd_link, applied_at
-       FROM applications
-       WHERE user_id = ? ${sqliteFilter}
-       ORDER BY applied_at ASC, id ASC
-       LIMIT ${EXPORT_MAX_ROWS}`,
-      `SELECT company_name, job_title, jd_link, applied_at
-       FROM applications
-       WHERE user_id = $1 ${postgresFilter}
-       ORDER BY applied_at ASC, id ASC
-       LIMIT ${EXPORT_MAX_ROWS}`,
-      params
-    );
 
     const workbook = buildXlsx({
       sheetName: 'Applications',
@@ -223,8 +271,7 @@ router.get('/export', authMiddleware, async (req, res) => {
       }))
     });
 
-    const stamp = (value, fallback) => (value ? String(value).slice(0, 10) : fallback);
-    const filename = `applications-${stamp(startDate, 'all')}-to-${stamp(endDate, localDateKey(new Date(), resolveTimeZone(req.user.timezone)))}.xlsx`;
+    const filename = exportFilename(req.query, timezone, 'xlsx');
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -234,6 +281,112 @@ router.get('/export', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Application export error:', error);
     res.status(500).json({ error: 'Failed to export applications', details: error.message });
+  }
+});
+
+/**
+ * The generated documents for a date range, as one zip.
+ *
+ * Laid out the way the application packs are read: a numbered folder per company
+ * holding the resume and cover letter in both formats, named after the account
+ * holder, with jobs.csv beside them so a row and a folder share the same number.
+ *
+ * Capped, because every row is four files fetched from storage.
+ */
+/**
+ * A stored file is either a full URL (cloud storage) or a name under uploads/.
+ * Mirrors the resolver the download routes use.
+ */
+function storedFileLocation(stored) {
+  if (!stored) return null;
+  if (/^https?:\/\//i.test(stored)) return stored;
+  return path.basename(stored);
+}
+const DOCUMENT_EXPORT_MAX_ROWS = 200;
+
+const safeName = (value, fallback) =>
+  String(value || '').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 60) || fallback;
+
+/** Storage keeps files either behind a URL or in the uploads folder; read both. */
+async function readStoredFile(fileUrl) {
+  if (!fileUrl) return null;
+  try {
+    if (/^https?:\/\//i.test(fileUrl)) {
+      const res = await fetch(fileUrl, { signal: AbortSignal.timeout(30000) });
+      if (!res.ok) return null;
+      return Buffer.from(await res.arrayBuffer());
+    }
+    return await fs.readFile(path.join(UPLOAD_DIR, path.basename(fileUrl)));
+  } catch {
+    return null;   // a missing file is reported in the manifest, never fatal
+  }
+}
+
+router.get('/export-documents', authMiddleware, async (req, res) => {
+  try {
+    const timezone = resolveTimeZone(req.query.timezone || req.user.timezone);
+    const rows = await loadHistoryRows(
+      req.user.id,
+      { ...req.query, timezone },
+      'id, company_name, job_title, jd_link, applied_at, cv_pdf_url, cv_doc_url, cover_letter_pdf_url, cover_letter_doc_url',
+      DOCUMENT_EXPORT_MAX_ROWS + 1
+    );
+
+    if (!rows.length) return res.status(404).json({ error: 'No applications in that range' });
+    if (rows.length > DOCUMENT_EXPORT_MAX_ROWS) {
+      return res.status(413).json({
+        error: `That range holds more than ${DOCUMENT_EXPORT_MAX_ROWS} applications. Narrow the dates and download it in parts.`
+      });
+    }
+
+    const user = await getOneCompat(
+      'SELECT full_name, email FROM users WHERE id = ?',
+      'SELECT full_name, email FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    const person = safeName(user?.full_name || String(user?.email || 'resume').split('@')[0], 'resume').replace(/\s+/g, '_');
+
+    const entries = [];
+    const manifest = [];
+    let files = 0;
+
+    for (const [index, row] of rows.entries()) {
+      const no = index + 1;
+      const folder = `${no}_${safeName(row.company_name, 'Unknown')}`;
+      const wanted = [
+        [row.cv_pdf_url, `${person}.pdf`],
+        [row.cv_doc_url, `${person}.docx`],
+        [row.cover_letter_pdf_url, `${person}_cover.pdf`],
+        [row.cover_letter_doc_url, `${person}_cover.docx`]
+      ];
+
+      const got = [];
+      for (const [fileUrl, name] of wanted) {
+        const data = await readStoredFile(storedFileLocation(fileUrl));
+        if (!data || !data.length) continue;
+        entries.push({ name: `${folder}/${name}`, data });
+        got.push(name);
+        files++;
+      }
+      manifest.push({ ...row, no, folder, files: got.length });
+    }
+
+    // jobs.csv travels inside the zip, so the pack explains itself.
+    entries.push({ name: 'jobs.csv', data: Buffer.from(toCsv(rows), 'utf8') });
+
+    const zip = buildZip(entries);
+    const filename = exportFilename(req.query, timezone, 'zip').replace('applications-', 'resumes-');
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Row-Count', String(rows.length));
+    res.setHeader('X-File-Count', String(files));
+    res.setHeader('X-Incomplete-Count', String(manifest.filter((m) => m.files < 4).length));
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Row-Count, X-File-Count, X-Incomplete-Count');
+    res.send(zip);
+  } catch (error) {
+    console.error('Document export error:', error);
+    res.status(500).json({ error: 'Failed to export documents', details: error.message });
   }
 });
 

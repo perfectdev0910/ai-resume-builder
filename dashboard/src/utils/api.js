@@ -149,6 +149,9 @@ export const applicationsAPI = {
   checkDuplicate: (companyName) => api.get('/applications/check-duplicate', { params: { companyName } }),
   // Returns the .xlsx itself, so the response has to stay binary.
   exportExcel: (params = {}) => api.get('/applications/export', { params, responseType: 'blob' }),
+  exportCsv: (params = {}) => api.get('/applications/export', { params: { ...params, format: 'csv' }, responseType: 'blob' }),
+  // The resumes and cover letters for the same range, zipped one folder per company.
+  exportDocuments: (params = {}) => api.get('/applications/export-documents', { params, responseType: 'blob' }),
   getCompanies: (q = '') =>
     api.get('/applications/companies', { params: q ? { q } : {} }),
   

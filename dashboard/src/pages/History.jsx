@@ -153,38 +153,55 @@ export default function History() {
     return match ? match[1] : 'applications.xlsx';
   };
 
-  const handleExport = async () => {
+  const exportParams = () => {
+    const params = {};
+    if (dateRange.start) params.startDate = dateRange.start;
+    if (dateRange.end) params.endDate = dateRange.end;
+    if (searchQuery.trim()) params.search = searchQuery.trim();
+    if (excludeLinkedIn) params.excludeLinkedIn = 'true';
+    // Dates on screen are this user's days, so the server must cut the range the same way.
+    params.timezone = userTimezone;
+    return params;
+  };
+
+  const EXPORTS = {
+    excel: { call: (p) => applicationsAPI.exportExcel(p), type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', name: 'applications.xlsx' },
+    csv: { call: (p) => applicationsAPI.exportCsv(p), type: 'text/csv;charset=utf-8', name: 'applications.csv' },
+    documents: { call: (p) => applicationsAPI.exportDocuments(p), type: 'application/zip', name: 'resumes.zip' }
+  };
+
+  const handleExport = async (kind = 'excel') => {
     if (exporting) return;
     setExporting(true);
-    setExportNote('');
+    setExportNote(kind === 'documents' ? 'Collecting the documents…' : '');
     try {
-      const params = {};
-      if (dateRange.start) params.startDate = dateRange.start;
-      if (dateRange.end) params.endDate = dateRange.end;
-      if (searchQuery.trim()) params.search = searchQuery.trim();
-      if (excludeLinkedIn) params.excludeLinkedIn = 'true';
-
-      const response = await applicationsAPI.exportExcel(params);
+      const { call, type, name } = EXPORTS[kind];
+      const response = await call(exportParams());
       const rows = Number(response.headers['x-row-count'] || 0);
       if (!rows) {
         setExportNote('No applications in that range — nothing to download.');
         return;
       }
 
-      const url = URL.createObjectURL(new Blob([response.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      }));
+      const url = URL.createObjectURL(new Blob([response.data], { type }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = filenameFrom(response.headers['content-disposition']);
+      link.download = filenameFrom(response.headers['content-disposition']) || name;
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-      setExportNote(rows >= 5000
-        ? `Downloaded 5000 applications — the export is capped, so narrow the dates for the rest.`
-        : `Downloaded ${rows} application${rows === 1 ? '' : 's'}.`);
+      if (kind === 'documents') {
+        const files = Number(response.headers['x-file-count'] || 0);
+        const incomplete = Number(response.headers['x-incomplete-count'] || 0);
+        setExportNote(`Downloaded ${files} files for ${rows} application${rows === 1 ? '' : 's'}`
+          + (incomplete ? ` — ${incomplete} had a missing document.` : '.'));
+      } else {
+        setExportNote(rows >= 5000
+          ? `Downloaded 5000 applications — the export is capped, so narrow the dates for the rest.`
+          : `Downloaded ${rows} application${rows === 1 ? '' : 's'}.`);
+      }
     } catch (error) {
       // With responseType 'blob' the error body is a Blob, so read it back as text.
       let message = 'Export failed.';
@@ -278,7 +295,7 @@ export default function History() {
         {/* Export of whatever the filters above select */}
         <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-3">
           <button
-            onClick={handleExport}
+            onClick={() => handleExport('excel')}
             disabled={exporting}
             className="btn btn-secondary py-1.5 text-sm disabled:opacity-50"
             title="Download the selected date range as an Excel file"
@@ -287,6 +304,24 @@ export default function History() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             {exporting ? 'Preparing…' : 'Download Excel'}
+          </button>
+
+          <button
+            onClick={() => handleExport('csv')}
+            disabled={exporting}
+            className="btn btn-secondary py-1.5 text-sm disabled:opacity-50"
+            title="Same rows as a CSV file"
+          >
+            Download CSV
+          </button>
+
+          <button
+            onClick={() => handleExport('documents')}
+            disabled={exporting}
+            className="btn btn-secondary py-1.5 text-sm disabled:opacity-50"
+            title="Resume and cover letter for every application in the range, one folder per company"
+          >
+            Download resumes (.zip)
           </button>
 
           <label className="flex items-center gap-2 text-sm text-gray-600">
