@@ -22,9 +22,18 @@ const GOOGLE_REVOKE_URL = `${OAUTH_BASE}/revoke`;
 const GOOGLE_USERINFO_URL = `${APIS_BASE}/oauth2/v2/userinfo`;
 const GOOGLE_CALENDAR_API = `${APIS_BASE}/calendar/v3`;
 
-// Read-only calendar access plus the email so the UI can show which account is connected.
+/**
+ * Least privilege, deliberately: we read events and the list of calendars to read them
+ * from — nothing else. The broad `calendar.readonly` also grants settings, ACLs and
+ * free/busy, which we never touch; asking for it makes Google's verification review
+ * harder to pass and gives the consent screen a scarier description than the truth.
+ *
+ * Connections made with the old broad scope keep working — their refresh token keeps
+ * whatever scope it was granted.
+ */
 const SCOPES = [
-  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.events.readonly',
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
   'https://www.googleapis.com/auth/userinfo.email'
 ];
 
@@ -101,6 +110,52 @@ async function deleteConnection(userId) {
   );
 }
 
+/**
+ * Errors about the OAuth *client* rather than the user's grant. They mean the client in
+ * Google Cloud is disabled, deleted or misconfigured: no user can connect, and retrying
+ * cannot help until someone fixes the credentials.
+ */
+const CLIENT_DEAD_ERRORS = new Set(['invalid_client', 'disabled_client', 'deleted_client', 'unauthorized_client']);
+
+// Set when Google tells us the client is dead; cleared by a success or new credentials.
+let clientFailure = null;
+const CLIENT_RETRY_MS = 60 * 60 * 1000;   // probe once an hour in case it was transient
+
+function noteClientFailure(error, clientId) {
+  const already = clientFailure && clientFailure.google === error.google;
+  clientFailure = { google: error.google, message: error.message, clientId, at: Date.now() };
+  if (!already) {
+    console.error(
+      `🔴 Google OAuth client rejected (${error.google}): ${error.message}\n` +
+      `   Client ${clientId ? `...${String(clientId).slice(-28)}` : '(unset)'} is disabled, deleted or misconfigured in Google Cloud.\n` +
+      '   Calendar sync is paused until GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET point at a working client.'
+    );
+  }
+}
+
+function clearClientFailure() {
+  if (clientFailure) console.log('🟢 Google OAuth client is working again; calendar sync resumed');
+  clientFailure = null;
+}
+
+/** The dashboard asks this so it can say what is wrong instead of failing silently. */
+function getClientFailure() {
+  if (!clientFailure) return null;
+  const { clientId } = getGoogleConfig();
+  // Credentials changed since the failure: give the new ones a clean slate.
+  if (clientId && clientFailure.clientId && clientId !== clientFailure.clientId) {
+    clientFailure = null;
+    return null;
+  }
+  return clientFailure;
+}
+
+/** True while we should not keep calling Google with a client it has already rejected. */
+function clientIsPaused() {
+  const failure = getClientFailure();
+  return Boolean(failure) && Date.now() - failure.at < CLIENT_RETRY_MS;
+}
+
 async function exchangeToken(body) {
   const { clientId, clientSecret } = getGoogleConfig();
   const res = await fetch(GOOGLE_TOKEN_URL, {
@@ -113,8 +168,13 @@ async function exchangeToken(body) {
     const err = new Error(data.error_description || data.error || 'Google token request failed');
     err.google = data.error;
     err.status = res.status;
+    if (CLIENT_DEAD_ERRORS.has(data.error)) {
+      err.serverConfig = true;
+      noteClientFailure(err, clientId);
+    }
     throw err;
   }
+  clearClientFailure();
   return data;
 }
 
@@ -306,8 +366,18 @@ async function syncEvents(userId) {
     [userId]
   );
 
-  const list = await googleGet(accessToken, `${GOOGLE_CALENDAR_API}/users/me/calendarList?minAccessRole=reader`);
-  const calendars = (list.items || []).filter((c) => c.selected !== false);
+  // If the calendar list is not readable (a connection granted only the events scope,
+  // or Google narrows it later), fall back to the primary calendar rather than failing
+  // the whole sync — the primary calendar is where interview invitations land.
+  let calendars;
+  try {
+    const list = await googleGet(accessToken, `${GOOGLE_CALENDAR_API}/users/me/calendarList?minAccessRole=reader`);
+    calendars = (list.items || []).filter((c) => c.selected !== false);
+  } catch (error) {
+    if (error.status !== 403) throw error;
+    console.warn(`Calendar list unreadable for user ${userId} (${error.message}); syncing the primary calendar only`);
+    calendars = [{ id: 'primary', summary: 'Primary', backgroundColor: null }];
+  }
 
   const existingRows = await getAllCompat(
     'SELECT id, google_calendar_id, google_event_id, edited_fields, hidden FROM calendar_events WHERE user_id = ?',
@@ -408,6 +478,9 @@ async function syncEvents(userId) {
 let syncAllRunning = false;
 async function syncAllConnected() {
   if (syncAllRunning) return { skipped: true };
+  // A dead client fails for every user, every cycle. Pausing keeps the logs readable
+  // and stops us pointing a retry loop at Google for a credential only a human can fix.
+  if (clientIsPaused()) return { skipped: true, clientFailure: getClientFailure() };
   syncAllRunning = true;
   const summary = { users: 0, ok: 0, failed: 0, imported: 0, updated: 0, removed: 0 };
   try {
@@ -426,6 +499,12 @@ async function syncAllConnected() {
         summary.removed += r.removed;
       } catch (err) {
         summary.failed++;
+        // A client-level failure is not this user's problem and will repeat for every
+        // remaining user: stop the pass instead of failing identically N times.
+        if (err.serverConfig) {
+          summary.clientFailure = getClientFailure();
+          break;
+        }
         console.warn(`Calendar auto-sync failed for user ${row.user_id}:`, err.message);
       }
     }
@@ -464,6 +543,17 @@ function respondError(res, error, fallback) {
   // A Google auth problem is a "reconnect your calendar" situation (409), not a session problem.
   let status = error.status && error.status >= 400 && error.status < 600 ? error.status : 500;
   if (status === 401 || status === 403) status = error.reconnect ? 409 : 502;
+  // A disabled/deleted OAuth client is a server credential problem: reconnecting cannot
+  // fix it, so say so rather than sending the user round the sign-in loop again.
+  if (error.serverConfig) {
+    return res.status(503).json({
+      error: 'Google Calendar is unavailable: the server\'s Google OAuth client was rejected by Google. '
+        + 'It is disabled, deleted or misconfigured in Google Cloud and needs new credentials.',
+      details: error.message,
+      reconnect: false,
+      serverConfig: true
+    });
+  }
   res.status(status).json({
     error: error.reconnect ? error.message : fallback,
     details: error.message,
@@ -474,14 +564,23 @@ function respondError(res, error, fallback) {
 // Is this user connected? Also tells the UI whether the server is configured at all.
 router.get('/google/status', authMiddleware, async (req, res) => {
   try {
-    const { configured } = getGoogleConfig();
+    const { clientId, configured } = getGoogleConfig();
+    const failure = getClientFailure();
     const conn = await loadConnection(req.user.id);
     res.json({
       configured,
       connected: Boolean(conn),
       email: conn?.google_email || null,
       connectedAt: conn?.created_at || null,
-      lastSyncedAt: conn?.last_synced_at || null
+      lastSyncedAt: conn?.last_synced_at || null,
+      // Not secrets: both are sent to Google in the consent URL anyway. They are here
+      // so a failed sign-in can be matched against the Google Cloud console without
+      // shell access to the server ("which client is this deploy actually using?").
+      clientId: clientId || null,
+      redirectUri: configured ? getRedirectUri(req) : null,
+      scopes: SCOPES,
+      // Set once Google has rejected the client itself, so the UI can stop blaming the user.
+      clientRejected: failure ? { error: failure.google, message: failure.message, since: new Date(failure.at).toISOString() } : null
     });
   } catch (error) {
     console.error('Calendar status error:', error);

@@ -169,6 +169,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
   try {
     const {
       full_name,
+      email,
       address,
       phone_number,
       linkedin_profile,
@@ -178,9 +179,28 @@ router.put('/profile', authMiddleware, async (req, res) => {
       credly_profile_link
     } = req.body;
 
+    // Email is the login identity, so it is validated and kept unique. Only touch it when
+    // the field is actually present and different from what the user already has.
+    let normalizedEmail = null;
+    if (email !== undefined && email !== null && String(email).trim() !== '') {
+      normalizedEmail = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ error: 'Please enter a valid email address' });
+      }
+      const taken = await getOneCompat(
+        'SELECT id FROM users WHERE email = ? AND id != ?',
+        'SELECT id FROM users WHERE email = $1 AND id != $2',
+        [normalizedEmail, req.user.id]
+      );
+      if (taken) {
+        return res.status(409).json({ error: 'That email is already in use by another account' });
+      }
+    }
+
     await runQueryCompat(
       `UPDATE users SET
         full_name = COALESCE(?, full_name),
+        email = COALESCE(?, email),
         address = COALESCE(?, address),
         phone_number = COALESCE(?, phone_number),
         linkedin_profile = COALESCE(?, linkedin_profile),
@@ -192,17 +212,19 @@ router.put('/profile', authMiddleware, async (req, res) => {
        WHERE id = ?`,
       `UPDATE users SET
         full_name = COALESCE($1, full_name),
-        address = COALESCE($2, address),
-        phone_number = COALESCE($3, phone_number),
-        linkedin_profile = COALESCE($4, linkedin_profile),
-        github_link = COALESCE($5, github_link),
-        experience_years = COALESCE($6, experience_years),
-        timezone = COALESCE($7, timezone),
-        credly_profile_link = COALESCE($8, credly_profile_link),
+        email = COALESCE($2, email),
+        address = COALESCE($3, address),
+        phone_number = COALESCE($4, phone_number),
+        linkedin_profile = COALESCE($5, linkedin_profile),
+        github_link = COALESCE($6, github_link),
+        experience_years = COALESCE($7, experience_years),
+        timezone = COALESCE($8, timezone),
+        credly_profile_link = COALESCE($9, credly_profile_link),
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9`,
+       WHERE id = $10`,
       [
         full_name ?? null,
+        normalizedEmail,
         address ?? null,
         phone_number ?? null,
         linkedin_profile ?? null,
@@ -214,7 +236,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
       ]
     );
 
-    res.json({ message: 'Profile updated successfully' });
+    res.json({ message: 'Profile updated successfully', email: normalizedEmail || undefined });
   } catch (error) {
     console.error('Profile update error:', error);
     res.status(500).json({ error: 'Failed to update profile', details: error.message });

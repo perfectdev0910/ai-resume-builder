@@ -123,16 +123,57 @@ ${ctx.jobDescription ? `\n## JOB DESCRIPTION\n${ctx.jobDescription}` : ''}${ctx.
 /* ------------------------------------------------------------------ */
 router.get('/context', authMiddleware, async (req, res) => {
   try {
+    // Without a query this is "the 50 most recent"; with one it searches the whole
+    // history, because the interview you are prepping for may be months old.
+    const query = String(req.query.q || '').trim();
+    const params = [req.user.id];
+    let filter = '';
+    if (query) {
+      filter = ` AND (LOWER(company_name) LIKE LOWER(${p(2)}) OR LOWER(job_title) LIKE LOWER(${p(3)}))`;
+      params.push(`%${query}%`, `%${query}%`);
+    }
+
     const rows = await db.getAll(
-      `SELECT id, job_title, company_name, applied_at FROM applications WHERE user_id = ${p(1)} ORDER BY applied_at DESC LIMIT 50`,
-      [req.user.id]
+      `SELECT id, job_title, company_name, applied_at FROM applications
+       WHERE user_id = ${p(1)}${filter}
+       ORDER BY applied_at DESC LIMIT 50`,
+      params
     );
     res.json({
+      query,
       applications: rows.map((r) => ({ id: r.id, jobTitle: r.job_title || '', companyName: r.company_name || '', appliedAt: r.applied_at }))
     });
   } catch (error) {
     console.error('Interview context error:', error);
     res.status(500).json({ error: 'Failed to load applications', details: error.message });
+  }
+});
+
+/**
+ * The same brief an event gives, for an application picked straight from the
+ * history: its job description and the resume that was generated for it.
+ */
+router.get('/applications/:id/brief', authMiddleware, async (req, res) => {
+  try {
+    const application = await loadApplication(req.user.id, req.params.id);
+    if (!application) return res.status(404).json({ error: 'Application not found' });
+    res.json({
+      event: null,
+      previous: [],
+      application: {
+        id: application.id,
+        jobTitle: application.job_title,
+        companyName: application.company_name,
+        jdLink: application.jd_link,
+        jdContent: String(application.jd_content || '').slice(0, 6000),
+        hasDoc: Boolean(application.cv_doc_url),
+        hasPdf: Boolean(application.cv_pdf_url),
+        appliedAt: application.applied_at
+      }
+    });
+  } catch (error) {
+    console.error('Application brief error:', error);
+    res.status(500).json({ error: 'Failed to load the application', details: error.message });
   }
 });
 
