@@ -1,0 +1,10 @@
+{
+  "name": "job-runner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates tailored resumes for jobs collected by the AI Resume Builder extension and writes an Excel report.",
+  "type": "commonjs",
+  "bin": { "job-runner": "run.js" },
+  "scripts": { "start": "node run.js" },
+  "dependencies": { "exceljs": "^4.4.0" }
+}

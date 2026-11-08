@@ -51,10 +51,14 @@ export default function Profile() {
     setSaving(true);
     try {
       await usersAPI.updateProfile(basicInfo);
-      updateUser(basicInfo);
+      // Store the normalized email the server actually saved (trimmed + lowercased).
+      const saved = { ...basicInfo, email: (basicInfo.email || '').trim().toLowerCase() || basicInfo.email };
+      setBasicInfo(saved);
+      updateUser(saved);
       showMessage('success', 'Profile updated successfully');
     } catch (error) {
-      showMessage('error', 'Failed to update profile');
+      // The email checks (invalid / already in use) return a specific reason worth showing.
+      showMessage('error', error.response?.data?.error || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
@@ -240,7 +244,8 @@ export default function Profile() {
             </div>
             <div>
               <label className="label">Email</label>
-              <input type="email" name="email" value={basicInfo.email || ''} disabled className="input bg-gray-50" />
+              <input type="email" name="email" value={basicInfo.email || ''} onChange={handleBasicInfoChange} className="input" />
+              <p className="text-xs text-gray-400 mt-1">This is the email you sign in with. Changing it updates your login.</p>
             </div>
             <div>
               <label className="label">Phone Number</label>

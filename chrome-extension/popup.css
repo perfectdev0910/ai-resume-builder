@@ -422,3 +422,34 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+/* ---------- collect jobs ---------- */
+.hint { font-size: 11px; color: #6b7280; margin: 0 0 8px; line-height: 1.4; }
+.collect-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.collect-row label { font-size: 12px; color: #6b7280; }
+.collect-row input[type="number"] { width: 70px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+.collect-row select { flex: 1; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+.collect-stats { font-size: 12px; color: #374151; background: #f3f4f6; border-radius: 6px; padding: 8px; margin: 8px 0; line-height: 1.5; }
+.collect-stats.ok { background: #ecfdf5; color: #065f46; }
+.collect-stats.warn { background: #fffbeb; color: #92400e; }
+
+/* ---------- collect jobs ---------- */
+.hint { font-size: 11px; color: #6b7280; margin: 0 0 8px; line-height: 1.4; }
+.collect-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.collect-row label { font-size: 12px; color: #6b7280; }
+.collect-row input[type="number"] { width: 70px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+.collect-row select { flex: 1; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+.collect-stats { font-size: 12px; color: #374151; background: #f3f4f6; border-radius: 6px; padding: 8px; margin: 8px 0; line-height: 1.5; }
+.collect-stats.ok { background: #ecfdf5; color: #065f46; }
+.collect-stats.warn { background: #fffbeb; color: #92400e; }
+
+.collect-check { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; color: #4b5563; margin-bottom: 6px; line-height: 1.35; cursor: pointer; }
+.collect-check input { margin-top: 1px; }
+
+.auto-progress { font-size: 12px; background: #eef2ff; color: #3730a3; border-radius: 6px; padding: 8px; margin-bottom: 8px; line-height: 1.5; }
+.auto-progress .bar { height: 6px; background: #c7d2fe; border-radius: 3px; overflow: hidden; margin: 6px 0; }
+.auto-progress .bar span { display: block; height: 100%; background: #4f46e5; width: 0; transition: width .3s; }
+.auto-progress .note { color: #4b5563; font-size: 11px; word-break: break-word; }
+.auto-progress.done { background: #ecfdf5; color: #065f46; }
+.auto-progress.error { background: #fef2f2; color: #991b1b; }
+#autoStopBtn { width: auto; }

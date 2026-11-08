@@ -402,6 +402,15 @@ function CalendarTab() {
       if (popup && popup.closed) {
         popupRef.current = null;
         setConnecting(false);
+        // The popup closed without posting a result, so Google never reached our
+        // callback — it either was cancelled, or Google refused the request on its
+        // own page (e.g. "Access blocked: disabled_client"). Say so; silence here
+        // reads as "the button does nothing".
+        setNotice(
+          'Google sign-in closed before it finished. If Google showed "Access blocked", the ' +
+          'server\'s Google OAuth client is disabled or misconfigured in Google Cloud — ' +
+          'check the client below against the console.'
+        );
         loadStatus();
       }
     }, 500);
@@ -547,10 +556,33 @@ function CalendarTab() {
             </p>
           </div>
           {status.configured ? (
-            <button type="button" className="btn btn-primary" disabled={connecting} onClick={connect}>
-              <GoogleIcon />
-              {connecting ? 'Waiting for Google…' : 'Import'}
-            </button>
+            <>
+              <button type="button" className="btn btn-primary" disabled={connecting} onClick={connect}>
+                <GoogleIcon />
+                {connecting ? 'Waiting for Google…' : 'Import'}
+              </button>
+              {/* Shown only while disconnected: the two values Google checks, so a
+                  rejected sign-in can be matched against the Cloud console. */}
+              {status.clientRejected && (
+                <p className="text-xs text-rose-700 bg-rose-50 rounded-lg px-3 py-2 max-w-md mx-auto dark:bg-rose-900/30 dark:text-rose-200">
+                  Google rejected this server's OAuth client ({status.clientRejected.error}) — connecting cannot work until
+                  it is re-enabled, or replaced with new credentials, in Google Cloud.
+                </p>
+              )}
+              {status.clientId && (
+                <details className="text-left max-w-md mx-auto">
+                  <summary className="text-xs text-gray-400 cursor-pointer">Google sign-in not working?</summary>
+                  <dl className="mt-2 space-y-1 text-xs text-gray-500 break-all">
+                    <div><dt className="inline font-medium">OAuth client: </dt><dd className="inline">{status.clientId}</dd></div>
+                    <div><dt className="inline font-medium">Redirect URI: </dt><dd className="inline">{status.redirectUri}</dd></div>
+                  </dl>
+                  <p className="mt-2 text-xs text-gray-400">
+                    Both must exist, and match, in Google Cloud → Google Auth Platform → Clients. "Access
+                    blocked: disabled_client" means that client is disabled or deleted there.
+                  </p>
+                </details>
+              )}
+            </>
           ) : (
             <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block dark:bg-amber-900/30 dark:text-amber-200">
               Google Calendar isn't configured on the server yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).

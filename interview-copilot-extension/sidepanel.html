@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interview Copilot</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <!-- Login -->
+  <section id="view-login" class="view" hidden>
+    <div class="login-card">
+      <div class="brand">
+        <img src="icons/icon48.png" alt="" width="36" height="36" />
+        <div>
+          <h1>Interview Copilot</h1>
+          <p>Sign in with your AI Resume Builder account</p>
+        </div>
+      </div>
+      <form id="login-form">
+        <label>Email<input type="email" id="login-email" required autocomplete="username" /></label>
+        <label>Password<input type="password" id="login-password" required autocomplete="current-password" /></label>
+        <details class="advanced">
+          <summary>API server</summary>
+          <label>URL<input type="url" id="login-api" placeholder="https://your-api.onrender.com" /></label>
+        </details>
+        <p id="login-error" class="error" hidden></p>
+        <button type="submit" class="btn primary" id="login-submit">Sign in</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Main -->
+  <section id="view-main" class="view" hidden>
+    <header class="topbar">
+      <div class="context">
+        <select id="context-select" title="Which interview (or application) to answer from">
+          <option value="">General (profile only)</option>
+        </select>
+      </div>
+      <button id="app-search-toggle" class="btn icon" title="Search your application history for a resume and JD">🔎</button>
+      <button id="brief-toggle" class="btn icon" title="Brief: note, previous rounds, JD, resume" hidden>ℹ</button>
+      <div class="topbar-actions">
+        <button id="listen-toggle" class="btn ghost listen" title="Read live captions from the meeting tab">
+          <span class="dot"></span><span class="label">Listen</span>
+        </button>
+        <button id="menu-toggle" class="btn icon" title="Settings">⋯</button>
+      </div>
+    </header>
+
+    <!-- Searches the whole application history; the dropdown alone only holds the 50 most recent -->
+    <div id="app-search-row" class="app-search" hidden>
+      <input type="search" id="app-search" placeholder="Search application history by company or role…" autocomplete="off" />
+      <span id="app-search-hint" class="muted"></span>
+    </div>
+
+    <div id="menu" class="menu" hidden>
+      <div class="menu-row">
+        <span>Source</span>
+        <div class="seg" id="source-seg">
+          <button type="button" data-source="voice" class="on">Voice (tab audio)</button>
+          <button type="button" data-source="captions">Captions</button>
+        </div>
+      </div>
+      <label class="menu-row">
+        <span>Auto-answer detected questions</span>
+        <input type="checkbox" id="auto-answer" checked />
+      </label>
+      <label class="menu-row">
+        <span>Your name in the meeting (to ignore your own captions)</span>
+        <input type="text" id="self-name" placeholder="e.g. Jane" />
+      </label>
+      <div class="menu-row">
+        <span id="account-email" class="muted"></span>
+        <button id="logout" class="btn ghost small">Sign out</button>
+      </div>
+      <div class="menu-row">
+        <span class="muted">Clear this conversation</span>
+        <button id="clear" class="btn ghost small">Clear</button>
+      </div>
+    </div>
+
+    <section id="brief" class="brief" hidden></section>
+
+    <div id="status" class="status">
+      <span id="status-text">Open your Google Meet / Zoom / Teams tab, turn on captions, then press Listen.</span>
+    </div>
+
+    <main id="thread" class="thread">
+      <div class="empty" id="empty">
+        <p class="big">Ready when you are.</p>
+        <p>Switch to your meeting tab and press <b>Ctrl+Shift+Y</b> (or click the toolbar icon, then Listen). The interviewer's questions appear here with a suggested answer streamed in real time. You can also type a question below.</p>
+      </div>
+    </main>
+
+    <div id="live-caption" class="live-caption" hidden>
+      <span class="meter" id="meter"><span></span></span><span class="who"></span><span class="text"></span>
+    </div>
+
+    <div id="session-bar" class="session-bar" hidden>
+      <span class="rec-dot"></span>
+      <span id="session-time">00:00</span>
+      <span class="muted" id="session-info">recording · 0 questions</span>
+      <button id="end-interview" class="btn primary small">End interview</button>
+    </div>
+
+    <form id="ask-form" class="composer">
+      <textarea id="ask-input" rows="1" placeholder="Type or paste the interviewer's question…"></textarea>
+      <button type="submit" class="btn primary send" id="ask-submit" title="Answer (Enter)">➤</button>
+    </form>
+  </section>
+
+  <script src="voice.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

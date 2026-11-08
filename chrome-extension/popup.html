@@ -70,6 +70,62 @@
         <button id="logoutBtn" class="btn btn-sm btn-secondary">Logout</button>
       </div>
 
+      <!-- Collect jobs (for bulk resume generation) -->
+      <div class="section">
+        <h3>Collect jobs</h3>
+        <p class="hint">Open the job board with your date filter set, enter how many jobs you want, then press Start — each job is opened, its description captured, and it is marked applied. Press Stop any time.</p>
+        <div class="collect-row">
+          <label for="collectTarget">Target</label>
+          <input type="number" id="collectTarget" min="1" max="500" value="25" />
+          <select id="collectRange" title="Recorded with each job for your own filtering">
+            <option value="past_24h">Past 24 hours</option>
+            <option value="past_3d">Past 3 days</option>
+            <option value="past_week">Past week</option>
+            <option value="any">Any</option>
+          </select>
+        </div>
+        <label class="collect-check"><input type="checkbox" id="collectSkipEasyApply" checked /> Ignore LinkedIn Easy Apply jobs</label>
+        <label class="collect-check"><input type="checkbox" id="collectSkipDuplicates" checked /> Skip companies applied to in the last 30 days</label>
+        <label class="collect-check"><input type="checkbox" id="collectMarkApplied" checked /> Mark as applied on the job board once the description is captured</label>
+        <div class="collect-row">
+          <button id="autoStartBtn" class="btn btn-success btn-block">▶ Start auto-collect</button>
+          <button id="autoStopBtn" class="btn btn-secondary hidden">Stop</button>
+        </div>
+        <div id="autoProgress" class="auto-progress hidden"></div>
+        <button id="collectBtn" class="btn btn-secondary btn-block">Collect only what is on screen</button>
+        <div id="collectStats" class="collect-stats">No jobs collected yet.</div>
+        <div class="collect-row">
+          <button id="exportCollectedBtn" class="btn btn-secondary btn-sm">Export JSON</button>
+          <button id="clearCollectedBtn" class="btn btn-secondary btn-sm">Clear</button>
+        </div>
+      </div>
+
+      <!-- Generate resumes + Excel, all inside the extension -->
+      <div class="section">
+        <h3>Generate resumes &amp; Excel</h3>
+        <p class="hint">Creates a tailored resume and cover letter for every collected job, saves the files to your Downloads folder and writes an Excel report — no other tools needed.</p>
+        <div class="collect-row">
+          <label for="genTemplate">Style</label>
+          <select id="genTemplate">
+            <option value="classic">Classic</option>
+            <option value="modern">Modern</option>
+            <option value="minimal">Minimal</option>
+            <option value="executive">Executive</option>
+            <option value="bold">Bold</option>
+            <option value="compact">Compact</option>
+          </select>
+        </div>
+        <div class="collect-row">
+          <button id="genStartBtn" class="btn btn-success btn-block">Generate resumes &amp; Excel</button>
+          <button id="genStopBtn" class="btn btn-secondary hidden">Stop</button>
+        </div>
+        <div id="genProgress" class="auto-progress hidden"></div>
+        <div class="collect-row">
+          <button id="genExcelBtn" class="btn btn-secondary btn-sm">Download Excel again</button>
+          <button id="genRetryBtn" class="btn btn-secondary btn-sm hidden">Retry failed</button>
+        </div>
+      </div>
+
       <!-- JD Scraping Section -->
       <div class="section">
         <h3>Job Description</h3>
